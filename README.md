@@ -16,7 +16,7 @@
 
 ## Features
 
-- **Magic Signature Scanning**: Detects 124+ common file types and headers in raw firmware images.
+- ** Detects 124+ common file types and headers in raw firmware images.
 - **Shannon Entropy Analysis**: Visualizes data randomness to locate compressed or encrypted regions.
 - **Data Extraction**: Supports automatic decompression and extraction of GZIP, LZMA, and XZ regions.
 - **ELF Binary Detection & Security Assessment**: Analyzes embedded executables for security features (NX, PIE, RELRO) and checks if they are stripped.
@@ -99,6 +99,10 @@ Alternatively, use the included bootstrap script:
    ```bash
    cmake --build build -j$(nproc)
    ```
+3. Install the project:
+   ```bash
+   cmake --install build --prefix ~/.local     # or /usr/local (needs sudo)
+   ```
 
 The build process produces:
 - `build/engine/automata`: The main CLI analysis tool.
@@ -108,7 +112,7 @@ The build process produces:
 ## Usage
 
 ```
-./build/engine/automata [OPTIONS] <firmware_file>
+automata [OPTIONS] <firmware_file>
 
 Options:
   -j          JSON output mode
@@ -123,22 +127,22 @@ Options:
 
 Analyze a firmware blob and show human-readable output:
 ```bash
-./build/engine/automata firmware.bin
+automata firmware.bin
 ```
 
 Output results in JSON format (useful for scripting):
 ```bash
-./build/engine/automata -j firmware.bin
+automata -j firmware.bin
 ```
 
 Extract recognized compressed regions (e.g., LZMA, GZIP) and enable verbose output:
 ```bash
-./build/engine/automata -e -v firmware.bin
+automata -e -v firmware.bin
 ```
 
 Extract regions to a specific output directory:
 ```bash
-./build/engine/automata -e -o ./out firmware.bin
+automata -e -o ./out firmware.bin
 ```
 
 ## Example Output
