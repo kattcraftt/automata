@@ -38,3 +38,14 @@ add_executable(test_engine tests/test_engine.c ${ENGINE_SOURCES})
 target_include_directories(test_engine PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR}/data)
 target_link_libraries(test_engine m z lzma)
 target_compile_options(test_engine PRIVATE -Wall -Wextra -O2 -fstack-protector-strong)
+
+include(GNUInstallDirs)
+install(TARGETS automata RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# Option: install automatically at the end of every build
+option(AUTOMATA_AUTO_INSTALL "Install automata after building" OFF)
+if(AUTOMATA_AUTO_INSTALL)
+  add_custom_command(TARGET automata POST_BUILD
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR}
+    COMMENT "Installing automata to ${CMAKE_INSTALL_PREFIX}/bin")
+endif()
