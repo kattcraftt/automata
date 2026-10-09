@@ -1,0 +1,17 @@
+build/
+*.o
+*.so
+*.a
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+.venv/
+*.pkl
+.env
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
