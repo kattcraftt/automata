@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y cmake gcc g++ zlib1g-dev liblzma-dev
@@ -23,4 +23,4 @@ jobs:
       run: cmake --build build
 
     - name: Run tests
-      run: ./build/engine/test_engine
+      run: ctest --test-dir build --output-on-failure
