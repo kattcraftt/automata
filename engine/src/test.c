@@ -54,7 +54,7 @@ static int test_entropy_histogram(void) {
 
 /* ── String extraction tests ── */
 static int test_string_extract(void) {
-    uint8_t buf[] = "test1234\x00\x01hello_world\x02\x03ab";
+    uint8_t buf[] = "test1234\x00\x01hello_world\x02\x03" "ab";
     extracted_string_t strings[16];
     size_t count = 0;
     string_extract(buf, sizeof(buf) - 1, 4, strings, 16, &count);
