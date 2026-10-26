@@ -16,7 +16,7 @@
 
 ## Features
 
-- ** Detects 124+ common file types and headers in raw firmware images.
+- **Magic Signature Scanning**: Detects 124+ common file types and headers in raw firmware images.
 - **Shannon Entropy Analysis**: Visualizes data randomness to locate compressed or encrypted regions.
 - **Data Extraction**: Supports automatic decompression and extraction of GZIP, LZMA, and XZ regions.
 - **ELF Binary Detection & Security Assessment**: Analyzes embedded executables for security features (NX, PIE, RELRO) and checks if they are stripped.

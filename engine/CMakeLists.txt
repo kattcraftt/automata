@@ -12,6 +12,10 @@ set(ENGINE_SOURCES
     src/extract.c
     src/secrets.c
     src/report.c
+    src/squashfs.c
+    src/sbom.c
+    src/cve.c
+    src/test.c
 )
 
 # ASM on x86_64 only
@@ -33,16 +37,14 @@ target_include_directories(automata PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_libraries(automata m z lzma)
 target_compile_options(automata PRIVATE -Wall -Wextra -O2 -fstack-protector-strong)
 
-# Test executable
-add_executable(test_engine tests/test_engine.c ${ENGINE_SOURCES})
-target_include_directories(test_engine PRIVATE include ${CMAKE_CURRENT_SOURCE_DIR}/data)
-target_link_libraries(test_engine m z lzma)
-target_compile_options(test_engine PRIVATE -Wall -Wextra -O2 -fstack-protector-strong)
-
 include(GNUInstallDirs)
 install(TARGETS automata RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-# Option: install automatically at the end of every build
+# CTest integration
+enable_testing()
+add_test(NAME engine_tests COMMAND automata test)
+
+# Auto-install after build
 option(AUTOMATA_AUTO_INSTALL "Install automata after building" OFF)
 if(AUTOMATA_AUTO_INSTALL)
   add_custom_command(TARGET automata POST_BUILD

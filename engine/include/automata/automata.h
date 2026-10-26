@@ -2,7 +2,7 @@
 #ifndef AUTOMATA_H
 #define AUTOMATA_H
 
-#define AUTOMATA_VERSION "0.1.0"
+#define AUTOMATA_VERSION "0.2.0"
 
 #include "automata/util.h"
 #include "automata/entropy.h"
@@ -13,5 +13,8 @@
 #include "automata/secrets.h"
 #include "automata/hash.h"
 #include "automata/report.h"
+#include "automata/squashfs.h"
+#include "automata/sbom.h"
+#include "automata/cve.h"
 
 #endif /* AUTOMATA_H */
