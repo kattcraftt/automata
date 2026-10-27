@@ -12,8 +12,8 @@
 extern int run_all_tests(void);
 
 static void print_banner(void) {
-    printf("   ___         __                  __\n");
-    printf("  / _ | __ __ / /_ ___  __ _  ___ / /_ ___ _\n");
+    printf("   ___         __                   __\n");
+    printf("  / _ | __ __ / /_ ___  __ _  ___  / /_ ___ _\n");
     printf(" / __ |/ // // __// _ \\/  ' \\/ _ `/ __// _ `/\n");
     printf("/_/ |_|\\_,_/ \\__/ \\___/_/_/_/\\_,_/\\__/ \\_,_/\n");
     printf("   firmware analysis engine v%s\n\n", AUTOMATA_VERSION);
