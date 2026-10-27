@@ -2,8 +2,6 @@
 
 **automata** is a high-performance native firmware analysis engine written in C. It provides deep inspection of firmware blobs, extracting embedded data and detecting security vulnerabilities.
 
----
-
 ```
              ___         __                   __
             / _ | __ __ / /_ ___  __ _  ___  / /_ ___ _
