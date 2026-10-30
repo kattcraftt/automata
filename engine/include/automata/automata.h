@@ -16,5 +16,6 @@
 #include "automata/squashfs.h"
 #include "automata/sbom.h"
 #include "automata/cve.h"
+#include "automata/tree.h"
 
 #endif /* AUTOMATA_H */

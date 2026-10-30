@@ -9,6 +9,7 @@ typedef struct {
     char name[128];
     char version[64];
     char source[32];   /* "string", "elf", "config" */
+    char location[256]; /* file inside an extracted tree where first seen; empty = raw image */
 } component_t;
 
 /* Scan firmware data for known component version strings.

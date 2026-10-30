@@ -22,6 +22,7 @@ typedef struct {
     char description[128];
     char context[256];
     float confidence;
+    char source[256];   /* file inside an extracted tree; empty = raw image */
 } secret_finding_t;
 
 int secrets_scan(const uint8_t *data, size_t size, secret_finding_t *out_findings, size_t max_findings, size_t *out_count);

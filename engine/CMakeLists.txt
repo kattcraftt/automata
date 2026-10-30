@@ -15,6 +15,7 @@ set(ENGINE_SOURCES
     src/squashfs.c
     src/sbom.c
     src/cve.c
+    src/tree.c
     src/test.c
 )
 
