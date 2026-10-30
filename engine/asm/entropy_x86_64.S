@@ -19,3 +19,5 @@ mem_diff_count_asm:
     jnz .Lloop
 .Lend:
     ret
+
+.section .note.GNU-stack,"",@progbits
