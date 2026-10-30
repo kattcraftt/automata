@@ -88,7 +88,7 @@ static int cmd_scan(int argc, char **argv) {
         print_usage(argv[0]);
         return 2;
     }
-    (void)recursive_mode;
+    if (recursive_mode) extract_mode = 1;
 
     if (!json_mode) {
         print_banner();
@@ -114,6 +114,8 @@ static int cmd_scan(int argc, char **argv) {
     memset(&res, 0, sizeof(res));
     safe_strncpy(res.filename, input_file, sizeof(res.filename));
     res.file_size = mf.size;
+    res.extraction_ran = extract_mode;
+    res.show_all_findings = verbose;
 
     /* ── SHA-256 ── */
     sha256_hash(mf.data, mf.size, res.sha256);
@@ -161,11 +163,23 @@ static int cmd_scan(int argc, char **argv) {
         }
     }
 
+    /* Result arrays are on the heap: extracted trees can hold hundreds of ELFs and findings. */
+    enum { MAX_ELFS = 4096, MAX_SECRETS = 4096, RAW_MAX_SECRETS = 1024, MAX_COMPONENTS = 1024, RAW_MAX_COMPONENTS = 256, MAX_CVES = 4096 };
+    elf_info_t *elfs = calloc(MAX_ELFS, sizeof(*elfs));
+    secret_finding_t *secrets = calloc(MAX_SECRETS, sizeof(*secrets));
+    component_t *components = calloc(MAX_COMPONENTS, sizeof(*components));
+    cve_entry_t *cves = calloc(MAX_CVES, sizeof(*cves));
+    if (!elfs || !secrets || !components || !cves) {
+        fprintf(stderr, "Error: out of memory\n");
+        free(elfs); free(secrets); free(components); free(cves);
+        unmap_file(&mf);
+        return 1;
+    }
+
     /* ── ELF binary detection ── */
-    elf_info_t elfs[256];
     size_t num_elfs = 0;
     if (mf.size >= 4) {
-        for (size_t i = 0; i <= mf.size - 4 && num_elfs < 256; i++) {
+        for (size_t i = 0; i <= mf.size - 4 && num_elfs < MAX_ELFS; i++) {
             if (mf.data[i] == 0x7f && mf.data[i+1] == 'E' &&
                 mf.data[i+2] == 'L' && mf.data[i+3] == 'F') {
                 if (elf_parse_buf(mf.data + i, mf.size - i, &elfs[num_elfs]) == 0) {
@@ -182,9 +196,8 @@ static int cmd_scan(int argc, char **argv) {
     }
 
     /* ── Secrets scan ── */
-    secret_finding_t secrets[1024];
     size_t num_secrets = 0;
-    secrets_scan(mf.data, mf.size, secrets, 1024, &num_secrets);
+    secrets_scan(mf.data, mf.size, secrets, RAW_MAX_SECRETS, &num_secrets);
     res.secrets = secrets;
     res.num_secrets = num_secrets;
 
@@ -193,21 +206,46 @@ static int cmd_scan(int argc, char **argv) {
     }
 
     /* ── String extraction (count only) ── */
-    extracted_string_t str_buf[128];
-    size_t str_count = 0;
-    string_extract(mf.data, mf.size, 4, str_buf, 128, &str_count);
-    res.num_strings = str_count;
+    res.num_strings = string_count(mf.data, mf.size, 4);
 
     /* ── SBOM component detection ── */
-    component_t components[256];
     size_t num_components = 0;
-    sbom_scan(mf.data, mf.size, components, 256, &num_components);
+    sbom_scan(mf.data, mf.size, components, RAW_MAX_COMPONENTS, &num_components);
+
+    /* ── Extracted trees: ELF / secrets / SBOM on the unpacked files (and nested archives with -r) ── */
+    if (extract_mode) {
+        tree_limits_t lim;
+        tree_limits_default(&lim);
+        lim.recursive = recursive_mode;
+
+        tree_results_t tr;
+        memset(&tr, 0, sizeof(tr));
+        tr.elfs = elfs;             tr.max_elfs = MAX_ELFS;             tr.num_elfs = num_elfs;
+        tr.secrets = secrets;       tr.max_secrets = MAX_SECRETS;       tr.num_secrets = num_secrets;
+        tr.components = components; tr.max_components = MAX_COMPONENTS; tr.num_components = num_components;
+
+        for (size_t i = 0; i < num_extractions; i++) {
+            tree_scan(outdir, extractions[i].path, &lim, &tr);
+        }
+        num_elfs = tr.num_elfs;
+        num_secrets = tr.num_secrets;
+        num_components = tr.num_components;
+        res.num_elfs = num_elfs;
+        res.num_secrets = num_secrets;
+        res.tree_files_scanned = tr.files_scanned;
+        res.tree_files_skipped = tr.files_skipped;
+        res.nested_extractions = tr.nested_extractions;
+        res.tree_truncated = tr.truncated;
+
+        if (verbose) {
+            fprintf(stderr, "[*] Scanned %zu extracted files (%zu nested archives)\n", tr.files_scanned, tr.nested_extractions);
+        }
+    }
 
     /* ── CVE correlation ── */
-    cve_entry_t cves[256];
     size_t num_cves = 0;
     if (num_components > 0) {
-        cve_check(components, num_components, cves, 256, &num_cves);
+        cve_check(components, num_components, cves, MAX_CVES, &num_cves);
     }
 
     /* ── Finalize timing ── */
@@ -215,22 +253,14 @@ static int cmd_scan(int argc, char **argv) {
     res.analysis_time_secs = (double)(ts_end.tv_sec - ts_start.tv_sec) +
                              (double)(ts_end.tv_nsec - ts_start.tv_nsec) / 1e9;
 
+    res.components = components;
+    res.num_components = num_components;
+    res.cves = cves;
+    res.num_cves = num_cves;
+
     /* ── Output ── */
     if (json_mode) {
         report_json(&res, NULL);
-        printf("{\n  \"components\": [\n");
-        for (size_t i = 0; i < num_components; i++) {
-            printf("    { \"name\": \"%s\", \"version\": \"%s\", \"source\": \"%s\" }%s\n",
-                   components[i].name, components[i].version, components[i].source,
-                   (i + 1 < num_components) ? "," : "");
-        }
-        printf("  ],\n  \"cves\": [\n");
-        for (size_t i = 0; i < num_cves; i++) {
-            printf("    { \"cve_id\": \"%s\", \"severity\": \"%s\", \"component\": \"%s\", \"description\": \"%s\" }%s\n",
-                   cves[i].cve_id, cves[i].severity, cves[i].component, cves[i].description,
-                   (i + 1 < num_cves) ? "," : "");
-        }
-        printf("  ]\n}\n");
     } else {
         report_human(&res, NULL);
         print_entropy_sparkline(&emap);
@@ -240,7 +270,9 @@ static int cmd_scan(int argc, char **argv) {
             printf("  None detected\n");
         } else {
             for (size_t i = 0; i < num_components; i++) {
-                printf("  %-20s %s (%s)\n", components[i].name, components[i].version, components[i].source);
+                printf("  %-20s %s (%s)", components[i].name, components[i].version, components[i].source);
+                if (components[i].location[0]) { printf(" in "); report_print_safe(stdout, components[i].location); }
+                printf("\n");
             }
         }
 
@@ -256,6 +288,7 @@ static int cmd_scan(int argc, char **argv) {
     }
 
     entropy_map_free(&emap);
+    free(elfs); free(secrets); free(components); free(cves);
     unmap_file(&mf);
     return 0;
 }
@@ -291,7 +324,6 @@ static int cmd_extract(int argc, char **argv) {
         fprintf(stderr, "Error: no input file specified for extract.\n");
         return 2;
     }
-    (void)recursive_mode;
 
     mapped_file_t mf;
     if (map_file(input_file, &mf) != 0) {
@@ -317,6 +349,19 @@ static int cmd_extract(int argc, char **argv) {
     for (size_t i = 0; i < num_extractions; i++) {
         printf("  [0x%08zx] %-16s -> %s (%zu bytes)\n",
                extractions[i].offset, extractions[i].type, extractions[i].path, extractions[i].decompressed);
+    }
+
+    if (recursive_mode) {
+        /* unpack-only walk: no analysis, just open archives found inside the extracted files */
+        tree_limits_t lim;
+        tree_limits_default(&lim);
+        lim.analyze = 0;
+        lim.recursive = 1;
+        tree_results_t tr;
+        memset(&tr, 0, sizeof(tr));
+        for (size_t i = 0; i < num_extractions; i++) tree_scan(outdir, extractions[i].path, &lim, &tr);
+        printf("Recursive: unpacked %zu nested archives (%zu files visited)%s\n", tr.nested_extractions, tr.files_scanned,
+               tr.truncated ? " - limits reached, output incomplete" : "");
     }
 
     unmap_file(&mf);
