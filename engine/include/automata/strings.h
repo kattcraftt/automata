@@ -11,6 +11,9 @@ typedef struct {
     size_t length;
 } extracted_string_t;
 
+/* Count printable runs of at least min_len bytes (no cap). */
+size_t string_count(const uint8_t *data, size_t size, size_t min_len);
+
 int string_extract(const uint8_t *data, size_t size, size_t min_len, extracted_string_t *out_strings, size_t max_strings, size_t *out_count);
 
 #endif /* AUTOMATA_STRINGS_H */

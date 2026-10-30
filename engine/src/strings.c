@@ -30,3 +30,18 @@ int string_extract(const uint8_t *data, size_t size, size_t min_len, extracted_s
     *out_count = count;
     return 0;
 }
+
+size_t string_count(const uint8_t *data, size_t size, size_t min_len) {
+    if (data == NULL) return 0;
+    size_t count = 0, run = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (isprint(data[i])) {
+            run++;
+        } else {
+            if (run >= min_len) count++;
+            run = 0;
+        }
+    }
+    if (run >= min_len) count++;
+    return count;
+}
