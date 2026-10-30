@@ -67,6 +67,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2014-0160",
         .component = "openssl",
+        .introduced_version = "1.0.1",
         .affected_version = "<1.0.1g",
         .fixed_version = "1.0.1g",
         .severity = "CRITICAL",
@@ -75,6 +76,25 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2014-0224",
         .component = "openssl",
+        .introduced_version = "0.9.8",
+        .affected_version = "<0.9.8za",
+        .fixed_version = "0.9.8za",
+        .severity = "HIGH",
+        .description = "SSL/TLS MITM ChangeCipherSpec injection"
+    },
+    {
+        .cve_id = "CVE-2014-0224",
+        .component = "openssl",
+        .introduced_version = "1.0.0",
+        .affected_version = "<1.0.0m",
+        .fixed_version = "1.0.0m",
+        .severity = "HIGH",
+        .description = "SSL/TLS MITM ChangeCipherSpec injection"
+    },
+    {
+        .cve_id = "CVE-2014-0224",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
         .affected_version = "<1.0.1h",
         .fixed_version = "1.0.1h",
         .severity = "HIGH",
@@ -83,6 +103,16 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2016-2107",
         .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1t",
+        .fixed_version = "1.0.1t",
+        .severity = "HIGH",
+        .description = "Padding oracle in AES-NI CBC MAC check"
+    },
+    {
+        .cve_id = "CVE-2016-2107",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
         .affected_version = "<1.0.2h",
         .fixed_version = "1.0.2h",
         .severity = "HIGH",
@@ -91,14 +121,52 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2022-0778",
         .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2zd",
+        .fixed_version = "1.0.2zd",
+        .severity = "HIGH",
+        .description = "BN_mod_sqrt() infinite loop via crafted certificate"
+    },
+    {
+        .cve_id = "CVE-2022-0778",
+        .component = "openssl",
+        .introduced_version = "1.1.1",
         .affected_version = "<1.1.1n",
         .fixed_version = "1.1.1n",
         .severity = "HIGH",
         .description = "BN_mod_sqrt() infinite loop via crafted certificate"
     },
     {
+        .cve_id = "CVE-2022-0778",
+        .component = "openssl",
+        .introduced_version = "3.0.0",
+        .affected_version = "<3.0.2",
+        .fixed_version = "3.0.2",
+        .severity = "HIGH",
+        .description = "BN_mod_sqrt() infinite loop via crafted certificate"
+    },
+    {
         .cve_id = "CVE-2015-0204",
         .component = "openssl",
+        .introduced_version = "0.9.8",
+        .affected_version = "<0.9.8zd",
+        .fixed_version = "0.9.8zd",
+        .severity = "HIGH",
+        .description = "RSA downgrade vulnerability (FREAK)"
+    },
+    {
+        .cve_id = "CVE-2015-0204",
+        .component = "openssl",
+        .introduced_version = "1.0.0",
+        .affected_version = "<1.0.0p",
+        .fixed_version = "1.0.0p",
+        .severity = "HIGH",
+        .description = "RSA downgrade vulnerability (FREAK)"
+    },
+    {
+        .cve_id = "CVE-2015-0204",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
         .affected_version = "<1.0.1k",
         .fixed_version = "1.0.1k",
         .severity = "HIGH",
@@ -293,6 +361,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2023-38545",
         .component = "curl",
+        .introduced_version = "7.69.0",
         .affected_version = "<8.4.0",
         .fixed_version = "8.4.0",
         .severity = "CRITICAL",
@@ -301,6 +370,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2022-32221",
         .component = "curl",
+        .introduced_version = "7.7",
         .affected_version = "<7.86.0",
         .fixed_version = "7.86.0",
         .severity = "HIGH",
@@ -309,6 +379,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2021-22946",
         .component = "curl",
+        .introduced_version = "7.20.0",
         .affected_version = "<7.79.0",
         .fixed_version = "7.79.0",
         .severity = "MEDIUM",
@@ -319,6 +390,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2021-23017",
         .component = "nginx",
+        .introduced_version = "0.6.18",
         .affected_version = "<1.20.1",
         .fixed_version = "1.20.1",
         .severity = "HIGH",
@@ -327,6 +399,16 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2018-16843",
         .component = "nginx",
+        .introduced_version = "1.9.5",
+        .affected_version = "<1.14.1",
+        .fixed_version = "1.14.1",
+        .severity = "MEDIUM",
+        .description = "Excessive memory consumption in HTTP/2 module"
+    },
+    {
+        .cve_id = "CVE-2018-16843",
+        .component = "nginx",
+        .introduced_version = "1.15.0",
         .affected_version = "<1.15.6",
         .fixed_version = "1.15.6",
         .severity = "MEDIUM",
@@ -335,16 +417,27 @@ static const cve_entry_t known_cves[] = {
 
     /* linux-kernel */
     {
-        .cve_id = "CVE-2021-3156",
+        .cve_id = "CVE-2022-0847",
         .component = "linux-kernel",
-        .affected_version = "<5.4.0",
-        .fixed_version = "5.4.0",
-        .severity = "CRITICAL",
-        .description = "Heap buffer overflow in sudo Baron Samedit (embedded)"
+        .introduced_version = "5.8",
+        .affected_version = "<5.10.102",
+        .fixed_version = "5.10.102",
+        .severity = "HIGH",
+        .description = "Dirty Pipe arbitrary file overwrite as unprivileged user"
     },
     {
         .cve_id = "CVE-2022-0847",
         .component = "linux-kernel",
+        .introduced_version = "5.11",
+        .affected_version = "<5.15.25",
+        .fixed_version = "5.15.25",
+        .severity = "HIGH",
+        .description = "Dirty Pipe arbitrary file overwrite as unprivileged user"
+    },
+    {
+        .cve_id = "CVE-2022-0847",
+        .component = "linux-kernel",
+        .introduced_version = "5.16",
         .affected_version = "<5.16.11",
         .fixed_version = "5.16.11",
         .severity = "HIGH",
@@ -353,6 +446,25 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2016-5195",
         .component = "linux-kernel",
+        .introduced_version = "2.6.22",
+        .affected_version = "<4.4.26",
+        .fixed_version = "4.4.26",
+        .severity = "HIGH",
+        .description = "Dirty COW race condition in memory manager copy-on-write"
+    },
+    {
+        .cve_id = "CVE-2016-5195",
+        .component = "linux-kernel",
+        .introduced_version = "4.5",
+        .affected_version = "<4.7.9",
+        .fixed_version = "4.7.9",
+        .severity = "HIGH",
+        .description = "Dirty COW race condition in memory manager copy-on-write"
+    },
+    {
+        .cve_id = "CVE-2016-5195",
+        .component = "linux-kernel",
+        .introduced_version = "4.8",
         .affected_version = "<4.8.3",
         .fixed_version = "4.8.3",
         .severity = "HIGH",
@@ -361,8 +473,45 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2019-11477",
         .component = "linux-kernel",
+        .introduced_version = "2.6.29",
         .affected_version = "<4.4.182",
         .fixed_version = "4.4.182",
+        .severity = "HIGH",
+        .description = "SACK Panic TCP denial of service / crash"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.5",
+        .affected_version = "<4.9.182",
+        .fixed_version = "4.9.182",
+        .severity = "HIGH",
+        .description = "SACK Panic TCP denial of service / crash"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.10",
+        .affected_version = "<4.14.127",
+        .fixed_version = "4.14.127",
+        .severity = "HIGH",
+        .description = "SACK Panic TCP denial of service / crash"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.15",
+        .affected_version = "<4.19.52",
+        .fixed_version = "4.19.52",
+        .severity = "HIGH",
+        .description = "SACK Panic TCP denial of service / crash"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.20",
+        .affected_version = "<5.1.11",
+        .fixed_version = "5.1.11",
         .severity = "HIGH",
         .description = "SACK Panic TCP denial of service / crash"
     },
@@ -371,6 +520,7 @@ static const cve_entry_t known_cves[] = {
     {
         .cve_id = "CVE-2024-6387",
         .component = "openssh",
+        .introduced_version = "8.5",
         .affected_version = "<9.8",
         .fixed_version = "9.8",
         .severity = "CRITICAL",
@@ -450,6 +600,12 @@ int cve_check(const component_t *components, size_t num_components,
         for (size_t j = 0; j < num_cves; j++) {
             const cve_entry_t *cve = &known_cves[j];
             if (strcmp(comp->name, cve->component) != 0) {
+                continue;
+            }
+
+            /* Lower bound: skip components older than the release that introduced the bug. */
+            if (cve->introduced_version[0] != '\0' &&
+                version_compare(comp->version, cve->introduced_version) < 0) {
                 continue;
             }
 

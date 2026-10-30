@@ -7,6 +7,7 @@
 typedef struct {
     char cve_id[20];
     char component[128];
+    char introduced_version[64]; /* first vulnerable version (inclusive); empty = no lower bound */
     char affected_version[64];
     char fixed_version[64];
     char severity[16];      /* CRITICAL, HIGH, MEDIUM, LOW */
