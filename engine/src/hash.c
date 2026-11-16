@@ -50,7 +50,7 @@ void sha256_hash(const uint8_t *data, size_t size, uint8_t out[32]) {
         if (datalen == 64) {
             uint32_t w[64];
             for (int j = 0, k_idx = 0; j < 16; ++j, k_idx += 4)
-                w[j] = (buffer[k_idx] << 24) | (buffer[k_idx+1] << 16) | (buffer[k_idx+2] << 8) | (buffer[k_idx+3]);
+                w[j] = ((uint32_t)buffer[k_idx] << 24) | ((uint32_t)buffer[k_idx+1] << 16) | ((uint32_t)buffer[k_idx+2] << 8) | (uint32_t)buffer[k_idx+3];
             for (int j = 16; j < 64; ++j)
                 w[j] = SIG1(w[j-2]) + w[j-7] + SIG0(w[j-15]) + w[j-16];
             uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], f = state[5], g = state[6], h = state[7];
@@ -67,7 +67,7 @@ void sha256_hash(const uint8_t *data, size_t size, uint8_t out[32]) {
     if (datalen > 56) {
         while (datalen < 64) buffer[datalen++] = 0x00;
         uint32_t w[64];
-        for (int j = 0, k_idx = 0; j < 16; ++j, k_idx += 4) w[j] = (buffer[k_idx] << 24) | (buffer[k_idx+1] << 16) | (buffer[k_idx+2] << 8) | (buffer[k_idx+3]);
+        for (int j = 0, k_idx = 0; j < 16; ++j, k_idx += 4) w[j] = ((uint32_t)buffer[k_idx] << 24) | ((uint32_t)buffer[k_idx+1] << 16) | ((uint32_t)buffer[k_idx+2] << 8) | (uint32_t)buffer[k_idx+3];
         for (int j = 16; j < 64; ++j) w[j] = SIG1(w[j-2]) + w[j-7] + SIG0(w[j-15]) + w[j-16];
         uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], f = state[5], g = state[6], h = state[7];
         for (int j = 0; j < 64; ++j) {
@@ -88,7 +88,7 @@ void sha256_hash(const uint8_t *data, size_t size, uint8_t out[32]) {
     buffer[62] = (bitlen >> 8) & 0xFF;
     buffer[63] = (bitlen) & 0xFF;
     uint32_t w_fin[64];
-    for (int j = 0, k_idx = 0; j < 16; ++j, k_idx += 4) w_fin[j] = (buffer[k_idx] << 24) | (buffer[k_idx+1] << 16) | (buffer[k_idx+2] << 8) | (buffer[k_idx+3]);
+    for (int j = 0, k_idx = 0; j < 16; ++j, k_idx += 4) w_fin[j] = ((uint32_t)buffer[k_idx] << 24) | ((uint32_t)buffer[k_idx+1] << 16) | ((uint32_t)buffer[k_idx+2] << 8) | (uint32_t)buffer[k_idx+3];
     for (int j = 16; j < 64; ++j) w_fin[j] = SIG1(w_fin[j-2]) + w_fin[j-7] + SIG0(w_fin[j-15]) + w_fin[j-16];
     uint32_t a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], f = state[5], g = state[6], h = state[7];
     for (int j = 0; j < 64; ++j) {

@@ -16,4 +16,8 @@ typedef struct {
  * Returns 0 on success. */
 int sbom_scan(const uint8_t *data, size_t size, component_t *out, size_t max, size_t *out_count);
 
+/* Parse an opkg status file (OpenWrt). Package names are mapped to the names used by the CVE
+ * table (kernel -> linux-kernel, libopenssl -> openssl, ...) and the release suffix is dropped. */
+int sbom_parse_opkg_status(const uint8_t *data, size_t size, component_t *out, size_t max, size_t *out_count);
+
 #endif /* AUTOMATA_SBOM_H */

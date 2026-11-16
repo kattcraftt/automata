@@ -2,6 +2,7 @@
 #include "automata/identify.h"
 #include "automata/elf.h"
 #include "automata/squashfs.h"
+#include "automata/fsextract.h"
 #include "automata/util.h"
 #include <string.h>
 #include <zlib.h>
@@ -109,6 +110,25 @@ static float v_dtb(const uint8_t *p, size_t n) {
     return 1.0f;
 }
 
+static float v_zstd(const uint8_t *p, size_t n) {
+    if (n < 6) return 0.0f;
+    return (p[4] & 0x08) ? 0.0f : 0.9f;                 /* frame header descriptor: reserved bit must be 0 */
+}
+
+static float v_lz4(const uint8_t *p, size_t n) {
+    if (n < 7) return 0.0f;
+    return (((p[4] >> 6) & 3) == 1 && !(p[4] & 0x02)) ? 0.9f : 0.0f;   /* FLG: version 01, reserved bit 0 */
+}
+
+static float v_ubi(const uint8_t *p, size_t n) {
+    if (n < 64 || p[4] != 1) return 0.0f;
+    uint32_t vid = read_u32_be(p, n, 16), dat = read_u32_be(p, n, 20);
+    if (vid < 64 || vid > 4096 || dat < vid + 64 || dat > 65536) return 0.0f;
+    /* UBI CRC32: init 0xFFFFFFFF, no final inversion */
+    uint32_t crc = ~(uint32_t)crc32(0L, p, 60);
+    return crc == read_u32_be(p, n, 60) ? 1.0f : 0.3f;
+}
+
 static float v_cpio(const uint8_t *p, size_t n) {
     if (n < 110) return 0.0f;
     for (size_t i = 6; i < 110; i++) {
@@ -146,8 +166,9 @@ const signature_t builtin_signatures[] = {
     { (const uint8_t *)"070701",            6,  "cpio (newc)",      SIG_CPIO,          v_cpio },
     { (const uint8_t *)"MZ",                2,  "PE/COFF",          SIG_PE,            v_pe },
     { (const uint8_t *)"7z\xbc\xaf\x27\x1c",6,  "7-Zip",            SIG_7Z,            NULL },
-    { (const uint8_t *)"\x28\xb5\x2f\xfd",  4,  "Zstandard",        SIG_ZSTD,          NULL },
-    { (const uint8_t *)"\x04\x22\x4d\x18",  4,  "LZ4 Frame",        SIG_LZ4,           NULL }
+    { (const uint8_t *)"\x28\xb5\x2f\xfd",  4,  "Zstandard",        SIG_ZSTD,          v_zstd },
+    { (const uint8_t *)"\x04\x22\x4d\x18",  4,  "LZ4 Frame",        SIG_LZ4,           v_lz4 },
+    { (const uint8_t *)"UBI#",              4,  "UBI image",        SIG_UBI,           v_ubi }
 };
 
 const size_t num_builtin_signatures = sizeof(builtin_signatures) / sizeof(signature_t);
@@ -191,6 +212,13 @@ int identify_scan(const uint8_t *data, size_t size, finding_t *out_findings, siz
             out_findings[count].label = sig->label;
             out_findings[count].confidence = conf;
             out_findings[count].type = sig->type;
+            out_findings[count].length = 0;
+            if ((sig->type == SIG_SQUASHFS_LE || sig->type == SIG_SQUASHFS_BE) && conf >= 0.9f)
+                out_findings[count].length = squashfs_superblock_size(data + i, size - i, 0);
+            else if (sig->type == SIG_CRAMFS && conf >= 0.9f)
+                out_findings[count].length = cramfs_size(data + i, size - i, 0);
+            else if ((sig->type == SIG_UBI || sig->type == SIG_JFFS2_LE || sig->type == SIG_JFFS2_BE) && conf >= 0.9f)
+                out_findings[count].length = size - i;      /* extent is not recorded: assume it runs to the end, repeats inside are folded */
             count++;
             if (count >= max_findings) break;
         }
@@ -213,6 +241,7 @@ int identify_header(const uint8_t *data, size_t size, finding_t *out) {
         out->label = sig->label;
         out->confidence = conf;
         out->type = sig->type;
+        out->length = 0;
         found = 1;
     }
     return found;

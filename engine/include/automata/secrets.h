@@ -25,6 +25,13 @@ typedef struct {
     char source[256];   /* file inside an extracted tree; empty = raw image */
 } secret_finding_t;
 
+/* Flags for secrets_scan_ex */
+#define SECRETS_F_BINARY      0x1   /* input is a compiled binary: skip keyword patterns (variable names, format strings) */
+#define SECRETS_F_AUTODETECT  0x2   /* treat input as binary if it has a NUL in its first 4 KB */
+#define SECRETS_F_WEBUI       0x4   /* web UI page/script or UI string table: variable names and labels, skip keyword patterns */
+
+int secrets_scan_ex(const uint8_t *data, size_t size, secret_finding_t *out_findings, size_t max_findings, size_t *out_count, unsigned flags);
+
 int secrets_scan(const uint8_t *data, size_t size, secret_finding_t *out_findings, size_t max_findings, size_t *out_count);
 const char *secret_type_string(secret_type_t type);
 

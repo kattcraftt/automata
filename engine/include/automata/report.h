@@ -9,6 +9,8 @@
 #include "automata/secrets.h"
 #include "automata/sbom.h"
 #include "automata/cve.h"
+#include "automata/fwhdr.h"
+
 typedef struct {
     char filename[256];
     size_t file_size;
@@ -33,6 +35,9 @@ typedef struct {
     secret_finding_t *secrets;
     size_t num_secrets;
     
+    fwhdr_t *headers;          /* vendor image headers with verified checksums */
+    size_t num_headers;
+
     component_t *components;   /* SBOM, included in JSON output */
     size_t num_components;
     cve_entry_t *cves;

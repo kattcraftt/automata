@@ -31,7 +31,7 @@ static void print_usage(const char *prog) {
     printf("Options:\n");
     printf("  -j          JSON output\n");
     printf("  -e          Extract found compressed regions\n");
-    printf("  -r          Recursive extraction (TODO)\n");
+    printf("  -r          Recursive: also unpack archives found inside extracted files (implies -e)\n");
     printf("  -v          Verbose output\n");
     printf("  -o DIR      Output directory (default: <file>.extracted/)\n");
 }
@@ -192,7 +192,7 @@ static int cmd_scan(int argc, char **argv) {
     res.num_elfs = num_elfs;
 
     if (verbose) {
-        fprintf(stderr, "[*] Found %zu ELF binaries\n", num_elfs);
+        fprintf(stderr, "[*] Found %zu ELF binaries in the raw image\n", num_elfs);
     }
 
     /* ── Secrets scan ── */
@@ -202,7 +202,7 @@ static int cmd_scan(int argc, char **argv) {
     res.num_secrets = num_secrets;
 
     if (verbose) {
-        fprintf(stderr, "[*] Found %zu potential secrets\n", num_secrets);
+        fprintf(stderr, "[*] Found %zu potential secrets in the raw image\n", num_secrets);
     }
 
     /* ── String extraction (count only) ── */
@@ -238,7 +238,8 @@ static int cmd_scan(int argc, char **argv) {
         res.tree_truncated = tr.truncated;
 
         if (verbose) {
-            fprintf(stderr, "[*] Scanned %zu extracted files (%zu nested archives)\n", tr.files_scanned, tr.nested_extractions);
+            fprintf(stderr, "[*] Scanned %zu extracted files (%zu nested archives): %zu ELFs, %zu secrets, %zu components in total\n",
+                    tr.files_scanned, tr.nested_extractions, tr.num_elfs, tr.num_secrets, tr.num_components);
         }
     }
 
@@ -252,6 +253,13 @@ static int cmd_scan(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &ts_end);
     res.analysis_time_secs = (double)(ts_end.tv_sec - ts_start.tv_sec) +
                              (double)(ts_end.tv_nsec - ts_start.tv_nsec) / 1e9;
+
+    fwhdr_t *hdrs = calloc(32, sizeof(*hdrs));
+    size_t num_hdrs = 0;
+    if (hdrs) fwhdr_analyze(mf.data, mf.size, hdrs, 32, &num_hdrs);
+    res.headers = hdrs;
+    res.num_headers = num_hdrs;
+    if (verbose) fprintf(stderr, "[*] Found %zu image headers\n", num_hdrs);
 
     res.components = components;
     res.num_components = num_components;
@@ -283,12 +291,13 @@ static int cmd_scan(int argc, char **argv) {
             for (size_t i = 0; i < num_cves; i++) {
                 printf("  [%s] %-16s %-12s: %s\n",
                        cves[i].severity, cves[i].cve_id, cves[i].component, cves[i].description);
+                if (cves[i].condition[0]) printf("      requires: %s\n", cves[i].condition);
             }
         }
     }
 
     entropy_map_free(&emap);
-    free(elfs); free(secrets); free(components); free(cves);
+    free(elfs); free(secrets); free(components); free(cves); free(hdrs);
     unmap_file(&mf);
     return 0;
 }
@@ -347,8 +356,10 @@ static int cmd_extract(int argc, char **argv) {
 
     printf("Extracted %zu regions to %s\n", num_extractions, outdir);
     for (size_t i = 0; i < num_extractions; i++) {
-        printf("  [0x%08zx] %-16s -> %s (%zu bytes)\n",
-               extractions[i].offset, extractions[i].type, extractions[i].path, extractions[i].decompressed);
+        printf("  [0x%08zx] %-16s -> ", extractions[i].offset, extractions[i].type);
+        report_print_safe(stdout, extractions[i].path);
+        if (extractions[i].decompressed > 0) printf(" (%zu bytes)\n", extractions[i].decompressed);
+        else printf(" (%zu bytes of image unpacked)\n", extractions[i].compressed);
     }
 
     if (recursive_mode) {

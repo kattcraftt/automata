@@ -175,100 +175,13 @@ static const cve_entry_t known_cves[] = {
 
     /* busybox */
     {
-        .cve_id = "CVE-2021-42373",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "man applet heap out-of-bounds read"
-    },
-    {
-        .cve_id = "CVE-2021-42374",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "unlzma applet out-of-bounds heap access"
-    },
-    {
-        .cve_id = "CVE-2021-42378",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet use-after-free leading to code execution"
-    },
-    {
-        .cve_id = "CVE-2021-42379",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet next statement use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42380",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet clrvar use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42381",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet hashpipe use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42382",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet getvar_i use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42383",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet evaluate use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42384",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet handle_asgn use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42385",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet nvfree use-after-free"
-    },
-    {
-        .cve_id = "CVE-2021-42386",
-        .component = "busybox",
-        .affected_version = "<1.34.0",
-        .fixed_version = "1.34.0",
-        .severity = "HIGH",
-        .description = "awk applet nvalloc out-of-bounds write"
-    },
-    {
         .cve_id = "CVE-2022-48174",
         .component = "busybox",
         .affected_version = "<1.36.1",
         .fixed_version = "1.36.1",
         .severity = "CRITICAL",
-        .description = "ash shell stack overflow in arithmetic evaluation"
+        .description = "ash shell stack overflow in arithmetic evaluation",
+        .condition = "ash applet"
     },
 
     /* dropbear */
@@ -304,7 +217,8 @@ static const cve_entry_t known_cves[] = {
         .affected_version = "<2.83",
         .fixed_version = "2.83",
         .severity = "HIGH",
-        .description = "DNSpooq heap buffer overflow in DNSSEC sort_rrset"
+        .description = "DNSpooq heap buffer overflow in DNSSEC sort_rrset",
+        .condition = "DNSSEC enabled (--dnssec)"
     },
     {
         .cve_id = "CVE-2020-25682",
@@ -312,7 +226,8 @@ static const cve_entry_t known_cves[] = {
         .affected_version = "<2.83",
         .fixed_version = "2.83",
         .severity = "HIGH",
-        .description = "DNSpooq buffer overflow in extract_name"
+        .description = "DNSpooq buffer overflow in extract_name",
+        .condition = "DNSSEC enabled (--dnssec)"
     },
     {
         .cve_id = "CVE-2020-25683",
@@ -320,7 +235,8 @@ static const cve_entry_t known_cves[] = {
         .affected_version = "<2.83",
         .fixed_version = "2.83",
         .severity = "HIGH",
-        .description = "DNSpooq heap overflow in get_data"
+        .description = "DNSpooq heap overflow in get_data",
+        .condition = "DNSSEC enabled (--dnssec)"
     },
     {
         .cve_id = "CVE-2020-25687",
@@ -328,7 +244,8 @@ static const cve_entry_t known_cves[] = {
         .affected_version = "<2.83",
         .fixed_version = "2.83",
         .severity = "HIGH",
-        .description = "DNSpooq DNS cache poisoning via weak query validation"
+        .description = "DNSpooq DNS cache poisoning via weak query validation",
+        .condition = "DNSSEC enabled (--dnssec)"
     },
     {
         .cve_id = "CVE-2021-3448",
@@ -336,7 +253,8 @@ static const cve_entry_t known_cves[] = {
         .affected_version = "<2.85",
         .fixed_version = "2.85",
         .severity = "MEDIUM",
-        .description = "DNS rebind vulnerability with fixed port allocation"
+        .description = "DNS rebind vulnerability with fixed port allocation",
+        .condition = "fixed upstream query port (--query-port)"
     },
 
     /* lighttpd */
@@ -470,51 +388,6 @@ static const cve_entry_t known_cves[] = {
         .severity = "HIGH",
         .description = "Dirty COW race condition in memory manager copy-on-write"
     },
-    {
-        .cve_id = "CVE-2019-11477",
-        .component = "linux-kernel",
-        .introduced_version = "2.6.29",
-        .affected_version = "<4.4.182",
-        .fixed_version = "4.4.182",
-        .severity = "HIGH",
-        .description = "SACK Panic TCP denial of service / crash"
-    },
-    {
-        .cve_id = "CVE-2019-11477",
-        .component = "linux-kernel",
-        .introduced_version = "4.5",
-        .affected_version = "<4.9.182",
-        .fixed_version = "4.9.182",
-        .severity = "HIGH",
-        .description = "SACK Panic TCP denial of service / crash"
-    },
-    {
-        .cve_id = "CVE-2019-11477",
-        .component = "linux-kernel",
-        .introduced_version = "4.10",
-        .affected_version = "<4.14.127",
-        .fixed_version = "4.14.127",
-        .severity = "HIGH",
-        .description = "SACK Panic TCP denial of service / crash"
-    },
-    {
-        .cve_id = "CVE-2019-11477",
-        .component = "linux-kernel",
-        .introduced_version = "4.15",
-        .affected_version = "<4.19.52",
-        .fixed_version = "4.19.52",
-        .severity = "HIGH",
-        .description = "SACK Panic TCP denial of service / crash"
-    },
-    {
-        .cve_id = "CVE-2019-11477",
-        .component = "linux-kernel",
-        .introduced_version = "4.20",
-        .affected_version = "<5.1.11",
-        .fixed_version = "5.1.11",
-        .severity = "HIGH",
-        .description = "SACK Panic TCP denial of service / crash"
-    },
 
     /* openssh */
     {
@@ -571,7 +444,568 @@ static const cve_entry_t known_cves[] = {
         .fixed_version = "1.8.3",
         .severity = "MEDIUM",
         .description = "Buffer overflow in iptables-restore via malformed rules"
-    }
+    },
+
+    /* busybox 4237x/4238x (JFrog/Claroty, fixed in 1.34.0). Version ranges are the published affected ranges. */
+    {
+        .cve_id = "CVE-2021-42373",
+        .component = "busybox",
+        .introduced_version = "1.33.0",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "man applet NULL pointer dereference (DoS) when a section is given without a page",
+        .condition = "man applet"
+    },
+    {
+        .cve_id = "CVE-2021-42374",
+        .component = "busybox",
+        .introduced_version = "1.27.0",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "unlzma out-of-bounds heap read (information leak, DoS); reachable from any applet handling LZMA",
+        .condition = "unlzma/lzma applets"
+    },
+    {
+        .cve_id = "CVE-2021-42375",
+        .component = "busybox",
+        .introduced_version = "1.33.1",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "ash mishandles a special element (DoS under rare filtered-input conditions)",
+        .condition = "ash applet"
+    },
+    {
+        .cve_id = "CVE-2021-42376",
+        .component = "busybox",
+        .introduced_version = "1.16",
+        .affected_version = "<1.31.1",
+        .fixed_version = "1.32.0",
+        .severity = "MEDIUM",
+        .description = "hush NULL pointer dereference after a 0x03 delimiter (DoS)",
+        .condition = "hush applet"
+    },
+    {
+        .cve_id = "CVE-2021-42377",
+        .component = "busybox",
+        .introduced_version = "1.33.0",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "hush attacker-controlled pointer free via \"&&&\" (DoS, possible code execution)",
+        .condition = "hush applet"
+    },
+    {
+        .cve_id = "CVE-2021-42378",
+        .component = "busybox",
+        .introduced_version = "1.16",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk getvar_i use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42379",
+        .component = "busybox",
+        .introduced_version = "1.18",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk next_input_file use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42380",
+        .component = "busybox",
+        .introduced_version = "1.28",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk clrvar use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42381",
+        .component = "busybox",
+        .introduced_version = "1.21",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk hash_init use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42382",
+        .component = "busybox",
+        .introduced_version = "1.26",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk getvar_s use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42383",
+        .component = "busybox",
+        .introduced_version = "1.33.1",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk evaluate use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42384",
+        .component = "busybox",
+        .introduced_version = "1.18",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk handle_special use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42385",
+        .component = "busybox",
+        .introduced_version = "1.16",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk evaluate use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+    {
+        .cve_id = "CVE-2021-42386",
+        .component = "busybox",
+        .introduced_version = "1.16",
+        .affected_version = "<1.34.0",
+        .fixed_version = "1.34.0",
+        .severity = "MEDIUM",
+        .description = "awk nvalloc use-after-free (DoS, possible code execution)",
+        .condition = "awk applet"
+    },
+
+    /* linux-kernel: TCP SACK (CVE-2019-11477/11478). Per-branch ranges from OSV / kernel.org stable fixes. */
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "2.6.29",
+        .affected_version = "<3.16.69",
+        .fixed_version = "3.16.69",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "3.17",
+        .affected_version = "<4.4.182",
+        .fixed_version = "4.4.182",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.5",
+        .affected_version = "<4.9.182",
+        .fixed_version = "4.9.182",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.10",
+        .affected_version = "<4.14.127",
+        .fixed_version = "4.14.127",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.15",
+        .affected_version = "<4.19.52",
+        .fixed_version = "4.19.52",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11477",
+        .component = "linux-kernel",
+        .introduced_version = "4.20",
+        .affected_version = "<5.1.11",
+        .fixed_version = "5.1.11",
+        .severity = "HIGH",
+        .description = "SACK Panic: TCP SACK integer overflow, remote kernel panic"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "2.6.29",
+        .affected_version = "<3.16.69",
+        .fixed_version = "3.16.69",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "3.17",
+        .affected_version = "<4.4.182",
+        .fixed_version = "4.4.182",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "4.5",
+        .affected_version = "<4.9.182",
+        .fixed_version = "4.9.182",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "4.10",
+        .affected_version = "<4.14.127",
+        .fixed_version = "4.14.127",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "4.15",
+        .affected_version = "<4.19.52",
+        .fixed_version = "4.19.52",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+    {
+        .cve_id = "CVE-2019-11478",
+        .component = "linux-kernel",
+        .introduced_version = "4.20",
+        .affected_version = "<5.1.11",
+        .fixed_version = "5.1.11",
+        .severity = "MEDIUM",
+        .description = "SACK Slowness: fragmented TCP retransmission queue, excess resource usage"
+    },
+
+    /* dnsmasq before 2.78 (Google research set) */
+    {
+        .cve_id = "CVE-2017-14491",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "CRITICAL",
+        .description = "DNS reply heap buffer overflow (remote code execution)"
+    },
+    {
+        .cve_id = "CVE-2017-14492",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "CRITICAL",
+        .description = "IPv6 router advertisement heap overflow (remote code execution)",
+        .condition = "RA/DHCP service enabled"
+    },
+    {
+        .cve_id = "CVE-2017-14493",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "CRITICAL",
+        .description = "DHCPv6 stack buffer overflow (remote code execution)",
+        .condition = "DHCPv6 enabled"
+    },
+    {
+        .cve_id = "CVE-2017-14494",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "MEDIUM",
+        .description = "DHCPv6 information leak (defeats ASLR)",
+        .condition = "DHCPv6 enabled"
+    },
+    {
+        .cve_id = "CVE-2017-14495",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "HIGH",
+        .description = "memory exhaustion via crafted DNS requests (DoS)",
+        .condition = "--add-mac, --add-cpe-id or --add-subnet"
+    },
+    {
+        .cve_id = "CVE-2017-14496",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "HIGH",
+        .description = "integer underflow with large memcpy in DNS proxy (DoS)"
+    },
+    {
+        .cve_id = "CVE-2017-13704",
+        .component = "dnsmasq",
+        .affected_version = "<2.78",
+        .fixed_version = "2.78",
+        .severity = "HIGH",
+        .description = "crash on oversized DNS query (DoS)"
+    },
+
+    /* miniupnpd through 2.1 (NVD: "through 2.1", upper bound inclusive) */
+    {
+        .cve_id = "CVE-2019-12107",
+        .component = "miniupnpd",
+        .affected_version = "<2.1",
+        .severity = "HIGH",
+        .description = "upnp_event_prepare heap information leak (snprintf return value)"
+    },
+    {
+        .cve_id = "CVE-2019-12108",
+        .component = "miniupnpd",
+        .affected_version = "<2.1",
+        .severity = "HIGH",
+        .description = "GetOutboundPinholeTimeout NULL pointer dereference (DoS, int_port)"
+    },
+    {
+        .cve_id = "CVE-2019-12109",
+        .component = "miniupnpd",
+        .affected_version = "<2.1",
+        .severity = "HIGH",
+        .description = "GetOutboundPinholeTimeout NULL pointer dereference (DoS, rem_port)"
+    },
+    {
+        .cve_id = "CVE-2019-12110",
+        .component = "miniupnpd",
+        .affected_version = "<2.1",
+        .severity = "HIGH",
+        .description = "AddPortMapping NULL pointer dereference (DoS, upnpredirect.c)"
+    },
+    {
+        .cve_id = "CVE-2019-12111",
+        .component = "miniupnpd",
+        .affected_version = "<2.1",
+        .severity = "HIGH",
+        .description = "PCP copyIPv6IfDifferent NULL pointer dereference (DoS)"
+    },
+
+    /* openssl 1.0.1 before 1.0.1u and 1.0.2 before 1.0.2i (OpenSSL advisory of 22 Sep 2016) */
+    {
+        .cve_id = "CVE-2016-2177",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "CRITICAL",
+        .description = "pointer arithmetic undefined behaviour (out-of-bounds access)"
+    },
+    {
+        .cve_id = "CVE-2016-2177",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "CRITICAL",
+        .description = "pointer arithmetic undefined behaviour (out-of-bounds access)"
+    },
+    {
+        .cve_id = "CVE-2016-2178",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "MEDIUM",
+        .description = "DSA signing does not preserve the constant-time flag (key recovery via timing)",
+        .condition = "DSA signing"
+    },
+    {
+        .cve_id = "CVE-2016-2178",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "MEDIUM",
+        .description = "DSA signing does not preserve the constant-time flag (key recovery via timing)",
+        .condition = "DSA signing"
+    },
+    {
+        .cve_id = "CVE-2016-2179",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "DTLS buffered message DoS",
+        .condition = "DTLS in use"
+    },
+    {
+        .cve_id = "CVE-2016-2179",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "DTLS buffered message DoS",
+        .condition = "DTLS in use"
+    },
+    {
+        .cve_id = "CVE-2016-2180",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "TS_OBJ_print_bio out-of-bounds read"
+    },
+    {
+        .cve_id = "CVE-2016-2180",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "TS_OBJ_print_bio out-of-bounds read"
+    },
+    {
+        .cve_id = "CVE-2016-2181",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "DTLS replay protection DoS",
+        .condition = "DTLS in use"
+    },
+    {
+        .cve_id = "CVE-2016-2181",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "DTLS replay protection DoS",
+        .condition = "DTLS in use"
+    },
+    {
+        .cve_id = "CVE-2016-2182",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "CRITICAL",
+        .description = "BN_bn2dec out-of-bounds write"
+    },
+    {
+        .cve_id = "CVE-2016-2182",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "CRITICAL",
+        .description = "BN_bn2dec out-of-bounds write"
+    },
+    {
+        .cve_id = "CVE-2016-2183",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "SWEET32: birthday attack on 64-bit block ciphers (3DES/DES)",
+        .condition = "3DES/DES cipher suites enabled"
+    },
+    {
+        .cve_id = "CVE-2016-2183",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "SWEET32: birthday attack on 64-bit block ciphers (3DES/DES)",
+        .condition = "3DES/DES cipher suites enabled"
+    },
+    {
+        .cve_id = "CVE-2016-6302",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "malformed SHA512 session ticket DoS"
+    },
+    {
+        .cve_id = "CVE-2016-6302",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "malformed SHA512 session ticket DoS"
+    },
+    {
+        .cve_id = "CVE-2016-6303",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "CRITICAL",
+        .description = "MDC2_Update out-of-bounds write"
+    },
+    {
+        .cve_id = "CVE-2016-6303",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "CRITICAL",
+        .description = "MDC2_Update out-of-bounds write"
+    },
+    {
+        .cve_id = "CVE-2016-6304",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "HIGH",
+        .description = "OCSP Status Request extension unbounded memory growth (remote DoS)",
+        .condition = "OCSP support built in (not no-ocsp)"
+    },
+    {
+        .cve_id = "CVE-2016-6304",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "HIGH",
+        .description = "OCSP Status Request extension unbounded memory growth (remote DoS)",
+        .condition = "OCSP support built in (not no-ocsp)"
+    },
+    {
+        .cve_id = "CVE-2016-6306",
+        .component = "openssl",
+        .introduced_version = "1.0.1",
+        .affected_version = "<1.0.1u",
+        .fixed_version = "1.0.1u",
+        .severity = "MEDIUM",
+        .description = "certificate message out-of-bounds reads"
+    },
+    {
+        .cve_id = "CVE-2016-6306",
+        .component = "openssl",
+        .introduced_version = "1.0.2",
+        .affected_version = "<1.0.2i",
+        .fixed_version = "1.0.2i",
+        .severity = "MEDIUM",
+        .description = "certificate message out-of-bounds reads"
+    },
 };
 
 static const size_t num_cves = sizeof(known_cves) / sizeof(known_cves[0]);
@@ -646,6 +1080,6 @@ int cve_check(const component_t *components, size_t num_components,
         }
     }
 
-    *out_count = count;
+    *out_count = (count > max) ? max : count;
     return 0;
 }

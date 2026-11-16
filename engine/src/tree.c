@@ -16,6 +16,7 @@
 #define PER_FILE_SECRETS 64
 #define PER_FILE_COMPONENTS 16
 #define NESTED_MAX_RESULTS 32
+#define OPKG_MAX_PACKAGES 4096
 
 typedef struct {
     const char *base;
@@ -43,9 +44,24 @@ static const char *label_for(const tree_ctx_t *c, const char *path) {
     return path;
 }
 
+/* Web UI pages/scripts and UI string tables are full of "password=" variable names and labels. */
+static int is_webui_file(const char *label) {
+    const char *base = strrchr(label, '/');
+    base = base ? base + 1 : label;
+    const char *ext = strrchr(base, '.');
+    if (ext) {
+        static const char *exts[] = { ".htm", ".html", ".js", ".css", ".asp", ".jsp", ".xhtml", ".svg" };
+        for (size_t i = 0; i < sizeof(exts) / sizeof(exts[0]); i++)
+            if (strcasecmp(ext, exts[i]) == 0) return 1;
+    }
+    return strcasestr(base, "strtab") != NULL || strcasestr(base, "string_table") != NULL ||
+           strcasestr(base, "lang") == base || strcasestr(base, "locale") != NULL;
+}
+
 static int is_container(sig_type_t t) {
-    return t == SIG_GZIP || t == SIG_XZ || t == SIG_LZMA ||
-           t == SIG_SQUASHFS_LE || t == SIG_SQUASHFS_BE;
+    return t == SIG_GZIP || t == SIG_XZ || t == SIG_LZMA || t == SIG_BZIP2 || t == SIG_ZSTD || t == SIG_LZ4 ||
+           t == SIG_SQUASHFS_LE || t == SIG_SQUASHFS_BE || t == SIG_CRAMFS ||
+           t == SIG_JFFS2_LE || t == SIG_JFFS2_BE || t == SIG_UBI;
 }
 
 static void add_component(tree_results_t *o, const component_t *c, const char *label) {
@@ -102,6 +118,7 @@ static void process_file(tree_ctx_t *c, const char *path, const struct stat *st,
                 elf_info_t *e = &o->elfs[o->num_elfs];
                 if (elf_parse_buf(mf.data, mf.size, e) == 0) {
                     safe_strncpy(e->path, label, sizeof(e->path));
+                    elf_review(mf.data, mf.size, e);
                     o->num_elfs++;
                 }
             } else {
@@ -111,7 +128,9 @@ static void process_file(tree_ctx_t *c, const char *path, const struct stat *st,
 
         secret_finding_t sec[PER_FILE_SECRETS];
         size_t nsec = 0;
-        if (secrets_scan(mf.data, mf.size, sec, PER_FILE_SECRETS, &nsec) == 0) {
+        unsigned sflags = SECRETS_F_AUTODETECT | (elf_header_valid(mf.data, mf.size) ? SECRETS_F_BINARY : 0);
+        if (is_webui_file(label)) sflags |= SECRETS_F_WEBUI;
+        if (secrets_scan_ex(mf.data, mf.size, sec, PER_FILE_SECRETS, &nsec, sflags) == 0) {
             for (size_t i = 0; i < nsec; i++) {
                 if (o->num_secrets >= o->max_secrets) { o->truncated = 1; break; }
                 secret_finding_t *d = &o->secrets[o->num_secrets++];
@@ -123,7 +142,20 @@ static void process_file(tree_ctx_t *c, const char *path, const struct stat *st,
         component_t comps[PER_FILE_COMPONENTS];
         size_t ncomp = 0;
         if (sbom_scan(mf.data, mf.size, comps, PER_FILE_COMPONENTS, &ncomp) == 0) {
+            if (ncomp > PER_FILE_COMPONENTS) ncomp = PER_FILE_COMPONENTS;
             for (size_t i = 0; i < ncomp; i++) add_component(o, &comps[i], label);
+        }
+
+        /* OpenWrt package database: exact versions for every installed package */
+        size_t ll = strlen(label);
+        if (ll >= 11 && strcmp(label + ll - 11, "opkg/status") == 0) {
+            component_t *pk = malloc(sizeof(component_t) * OPKG_MAX_PACKAGES);
+            if (pk) {
+                size_t npk = 0;
+                if (sbom_parse_opkg_status(mf.data, mf.size, pk, OPKG_MAX_PACKAGES, &npk) == 0)
+                    for (size_t i = 0; i < npk; i++) add_component(o, &pk[i], label);
+                free(pk);
+            }
         }
     }
 

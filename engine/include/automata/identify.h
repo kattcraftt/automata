@@ -13,7 +13,7 @@ typedef enum {
     SIG_SQUASHFS_BE, SIG_SQUASHFS_LE, SIG_SQUASHFS_LZMA,
     SIG_JFFS2_LE, SIG_JFFS2_BE, SIG_UBOOT, SIG_LZMA, SIG_BZIP2,
     SIG_CRAMFS, SIG_UBIFS, SIG_ANDROID_BOOT, SIG_PEM, SIG_DTB,
-    SIG_CPIO, SIG_PE, SIG_7Z, SIG_ZSTD, SIG_LZ4
+    SIG_CPIO, SIG_PE, SIG_7Z, SIG_ZSTD, SIG_LZ4, SIG_UBI
 } sig_type_t;
 
 /* Optional header validator. p points at the magic, remaining is the number of
@@ -33,7 +33,8 @@ typedef struct {
     size_t offset;
     const char *label;
     float confidence;
-    sig_type_t type;   
+    sig_type_t type;
+    size_t length;      /* size of the container region when known (validated SquashFS), else 0 */
 } finding_t;
 
 extern const signature_t builtin_signatures[];

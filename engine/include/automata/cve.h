@@ -12,6 +12,7 @@ typedef struct {
     char fixed_version[64];
     char severity[16];      /* CRITICAL, HIGH, MEDIUM, LOW */
     char description[256];
+    char condition[96];     /* feature/applet/config the bug needs, empty = none known */
 } cve_entry_t;
 
 /* Check detected components against known CVE database.

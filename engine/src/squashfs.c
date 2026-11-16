@@ -61,7 +61,7 @@ static int find_in_path(const char *prog, char *out, size_t out_sz) {
 }
 
 int squashfs_available(void) {
-    char resolved[512];
+    char resolved[1024];
     return find_in_path("unsquashfs", resolved, sizeof(resolved));
 }
 

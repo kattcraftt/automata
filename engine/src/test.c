@@ -8,9 +8,20 @@
 #include <string.h>
 #include <math.h>
 #include <zlib.h>
+#include "test_fixtures.h"
+#ifdef HAVE_BZIP2
+#include <bzlib.h>
+#endif
+#ifdef HAVE_ZSTD
+#include <zstd.h>
+#endif
+#ifdef HAVE_LZ4
+#include <lz4frame.h>
+#endif
 #include <unistd.h>
 #include <ftw.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -260,9 +271,11 @@ static int test_extract_gzip_roundtrip(void) {
 
 /* ── Secrets scan tests ── */
 static int test_secrets_scan(void) {
-    uint8_t buf[256] = {0};
-    const char *key = "-----BEGIN RSA PRIVATE KEY-----";
-    memcpy(buf + 50, key, strlen(key));
+    uint8_t buf[512] = {0};
+    const char *key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\n-----END RSA PRIVATE KEY-----\n";
+    uint8_t buf2[512] = {0};
+    memcpy(buf2 + 50, key, strlen(key));
+    memcpy(buf, buf2, sizeof(buf) < sizeof(buf2) ? sizeof(buf) : sizeof(buf2));
 
     secret_finding_t findings[16];
     size_t num_findings = 0;
@@ -508,7 +521,7 @@ static int test_tree_scan(void) {
     char root[] = "/tmp/automata_tree_XXXXXX";
     if (mkdtemp(root) == NULL) { printf("FAIL: test_tree_scan (mkdtemp)\n"); return 1; }
 
-    const char *pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK\n-----END RSA PRIVATE KEY-----\n";
+    const char *pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\n-----END RSA PRIVATE KEY-----\n";
     put_file(root, "etc/key.pem", pem, strlen(pem));
     const char *bb = "xx BusyBox v1.30.1 multi-call binary";
     put_file(root, "bin/busybox", bb, strlen(bb));
@@ -597,6 +610,821 @@ static int test_report_escaping(void) {
     return 0;
 }
 
+/* ── Secrets: false-positive regressions from the IoTGoat scan ── */
+static int count_secrets(const char *text, unsigned flags, secret_type_t type) {
+    secret_finding_t f[16];
+    size_t n = 0;
+    secrets_scan_ex((const uint8_t *)text, strlen(text), f, 16, &n, flags);
+    int c = 0;
+    for (size_t i = 0; i < n; i++) if (f[i].type == type) c++;
+    return c;
+}
+
+static int test_secrets_false_positives(void) {
+    /* a PEM header with nothing after it is a parser constant (mbedTLS), not a key */
+    if (count_secrets("-----BEGIN RSA PRIVATE KEY-----", 0, PRIVATE_KEY) != 0 ||
+        count_secrets("-----BEGIN RSA PRIVATE KEY-----\n-----END RSA PRIVATE KEY-----\n", 0, PRIVATE_KEY) != 0 ||
+        count_secrets("-----BEGIN CERTIFICATE-----", 0, CERTIFICATE) != 0) {
+        printf("FAIL: test_secrets_false_positives (header-only PEM accepted)\n");
+        return 1;
+    }
+    /* variable references and format strings are not hard-coded passwords */
+    if (count_secrets("password=$PASSWORD\n", 0, PASSWORD) != 0 ||
+        count_secrets("password=%s&user=x", 0, PASSWORD) != 0 ||
+        count_secrets("password=\n", 0, PASSWORD) != 0) {
+        printf("FAIL: test_secrets_false_positives (password reference accepted)\n");
+        return 1;
+    }
+    /* keyword patterns do not apply to compiled binaries */
+    if (count_secrets("password=hunter2hunter2", SECRETS_F_BINARY, PASSWORD) != 0) {
+        printf("FAIL: test_secrets_false_positives (keyword matched inside a binary)\n");
+        return 1;
+    }
+    /* true positives still found */
+    if (count_secrets("wifi password=hunter2hunter2\n", 0, PASSWORD) != 1 ||
+        count_secrets("root:$1$xyz$abcdefghijklmnopqrstuv:0:0:root:/root:/bin/ash\n", 0, HARDCODED_CRED) != 1 ||
+        count_secrets("-----BEGIN EC PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0123\n\nMHcCAQEEIIrYSSNQFaA2Hwf1duRSxKtLUvVthYWkMSz6/Q9HEAXToAoGCCqGSM49AwEHoUQDQgAE\n-----END EC PRIVATE KEY-----\n", 0, PRIVATE_KEY) != 1) {
+        printf("FAIL: test_secrets_false_positives (real secret missed)\n");
+        return 1;
+    }
+    printf("PASS: test_secrets_false_positives\n");
+    return 0;
+}
+
+/* ── ELF kinds: kernel modules and libraries must not get meaningless NX/PIE verdicts ── */
+static void make_elf_ph(uint8_t *p, uint16_t e_type, uint32_t ph_type, uint32_t ph_flags) {
+    memset(p, 0, 128);
+    make_elf_header(p);
+    p[16] = (uint8_t)e_type;
+    p[28] = 52;                 /* e_phoff */
+    p[44] = 1;                  /* e_phnum */
+    p[42] = 32;                 /* e_phentsize */
+    for (int k = 0; k < 4; k++) p[52 + k] = (uint8_t)(ph_type >> (8 * k));
+    p[52 + 24] = (uint8_t)ph_flags;
+}
+
+static int test_elf_kinds(void) {
+    uint8_t b[128];
+    elf_info_t e;
+
+    memset(b, 0, sizeof(b));
+    make_elf_header(b);
+    b[16] = 1;                                           /* ET_REL, e.g. a kernel module */
+    if (elf_parse_buf(b, sizeof(b), &e) != 0 || e.kind != ELF_KIND_RELOCATABLE ||
+        strcmp(elf_nx_string(&e), "n/a") != 0 || strcmp(elf_pie_string(&e), "n/a") != 0 ||
+        strcmp(elf_relro_string(&e), "n/a") != 0) {
+        printf("FAIL: test_elf_kinds (relocatable object gets NX/PIE/RELRO verdicts)\n");
+        return 1;
+    }
+
+    make_elf_ph(b, 3, 6 /* PT_PHDR: no GNU_STACK, no INTERP */, 0);
+    if (elf_parse_buf(b, sizeof(b), &e) != 0 || e.kind != ELF_KIND_SHARED || e.is_pie ||
+        strcmp(elf_pie_string(&e), "n/a") != 0 || strcmp(elf_nx_string(&e), "unknown") != 0) {
+        printf("FAIL: test_elf_kinds (shared object misreported: kind=%d)\n", e.kind);
+        return 1;
+    }
+
+    make_elf_ph(b, 3, 3 /* PT_INTERP */, 0);
+    if (elf_parse_buf(b, sizeof(b), &e) != 0 || e.kind != ELF_KIND_PIE || !e.is_pie) {
+        printf("FAIL: test_elf_kinds (PIE executable not recognised)\n");
+        return 1;
+    }
+
+    make_elf_ph(b, 2, 0x6474e551 /* PT_GNU_STACK */, 7 /* RWE */);
+    if (elf_parse_buf(b, sizeof(b), &e) != 0 || e.kind != ELF_KIND_EXEC || !e.has_gnu_stack || e.has_nx ||
+        strcmp(elf_nx_string(&e), "no") != 0 || strcmp(elf_pie_string(&e), "no") != 0) {
+        printf("FAIL: test_elf_kinds (RWE stack not reported as NX off)\n");
+        return 1;
+    }
+
+    make_elf_ph(b, 2, 0x6474e551, 6 /* RW */);
+    if (elf_parse_buf(b, sizeof(b), &e) != 0 || !e.has_nx || strcmp(elf_nx_string(&e), "yes") != 0) {
+        printf("FAIL: test_elf_kinds (RW stack not reported as NX on)\n");
+        return 1;
+    }
+    printf("PASS: test_elf_kinds\n");
+    return 0;
+}
+
+/* ── SBOM: OpenWrt opkg package database ── */
+static int test_sbom_opkg(void) {
+    const char *status =
+        "Package: miniupnpd\nVersion: 2.1-1\nDepends: libc, iptables\nStatus: install user installed\n\n"
+        "Package: kernel\nVersion: 4.9.152-1-1fd2f1d8d1e1ff0e0b1e5d5c1d1c6a5a\nStatus: install user installed\n\n"
+        "Package: libopenssl\nVersion: 1.0.2q-1\nStatus: install user installed\n\n"
+        "Package: base-files\nVersion: 194-r7676-cddd7b4c77\nStatus: install user installed\n";
+    component_t c[16];
+    size_t n = 0;
+    if (sbom_parse_opkg_status((const uint8_t *)status, strlen(status), c, 16, &n) != 0 || n != 4) {
+        printf("FAIL: test_sbom_opkg (parsed %zu packages)\n", n);
+        return 1;
+    }
+    int mini = 0, kern = 0, ssl = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (strcmp(c[i].name, "miniupnpd") == 0 && strcmp(c[i].version, "2.1") == 0) mini = 1;
+        if (strcmp(c[i].name, "linux-kernel") == 0 && strcmp(c[i].version, "4.9.152") == 0) kern = 1;
+        if (strcmp(c[i].name, "openssl") == 0 && strcmp(c[i].version, "1.0.2q") == 0) ssl = 1;
+    }
+    if (!mini || !kern || !ssl) {
+        printf("FAIL: test_sbom_opkg (miniupnpd=%d kernel=%d openssl=%d)\n", mini, kern, ssl);
+        return 1;
+    }
+
+    /* and through the tree scanner: usr/lib/opkg/status inside an extracted rootfs */
+    char root[] = "/tmp/automata_opkg_XXXXXX";
+    if (mkdtemp(root) == NULL) { printf("FAIL: test_sbom_opkg (mkdtemp)\n"); return 1; }
+    put_file(root, "usr/lib/opkg/status", status, strlen(status));
+    component_t comps[16];
+    tree_results_t tr;
+    memset(&tr, 0, sizeof(tr));
+    tr.components = comps; tr.max_components = 16;
+    tree_scan(root, root, NULL, &tr);
+    int ok = 0;
+    for (size_t i = 0; i < tr.num_components; i++)
+        if (strcmp(comps[i].name, "miniupnpd") == 0 && strcmp(comps[i].source, "opkg") == 0 &&
+            strstr(comps[i].location, "opkg/status") != NULL) ok = 1;
+    rm_rf(root);
+    if (!ok || tr.num_components != 4) {
+        printf("FAIL: test_sbom_opkg (tree scan produced %zu components)\n", tr.num_components);
+        return 1;
+    }
+    printf("PASS: test_sbom_opkg\n");
+    return 0;
+}
+
+/* ── CVE ranges validated against NVD/OSV/JFrog data for the IoTGoat image ── */
+static int test_cve_iotgoat_ranges(void) {
+    struct { const char *n, *v, *id; int want; const char *why; } t[] = {
+        /* busybox 1.28.4 (IoTGoat) */
+        { "busybox", "1.28.4", "CVE-2021-42373", 0, "man applet: only 1.33.0-1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42383", 0, "awk evaluate: only 1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42375", 0, "ash: only 1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42374", 1, "unlzma: 1.27.0-1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42380", 1, "awk clrvar: 1.28-1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42386", 1, "awk nvalloc: 1.16-1.33.1" },
+        { "busybox", "1.28.4", "CVE-2021-42376", 1, "hush: 1.16-1.31.1" },
+        { "busybox", "1.27.2", "CVE-2021-42380", 0, "awk clrvar starts at 1.28" },
+        { "busybox", "1.33.1", "CVE-2021-42373", 1, "man applet affected" },
+        { "busybox", "1.33.1", "CVE-2021-42383", 1, "awk evaluate affected" },
+        { "busybox", "1.34.0", "CVE-2021-42386", 0, "fixed in 1.34.0" },
+        /* dnsmasq 2.73 (IoTGoat) */
+        { "dnsmasq", "2.73", "CVE-2017-14491", 1, "fixed in 2.78" },
+        { "dnsmasq", "2.73", "CVE-2017-14493", 1, "fixed in 2.78" },
+        { "dnsmasq", "2.78", "CVE-2017-14491", 0, "fixed in 2.78" },
+        { "dnsmasq", "2.73", "CVE-2020-25681", 1, "fixed in 2.83" },
+        /* miniupnpd 2.1 (IoTGoat) */
+        { "miniupnpd", "2.1", "CVE-2019-12110", 1, "through 2.1" },
+        { "miniupnpd", "2.0", "CVE-2019-12111", 1, "through 2.1" },
+        { "miniupnpd", "2.2", "CVE-2019-12110", 0, "after 2.1" },
+        /* openssl 1.0.2h (Netgear R7000) and the 22 Sep 2016 advisory */
+        { "openssl", "1.0.2h", "CVE-2016-6304", 1, "fixed in 1.0.2i" },
+        { "openssl", "1.0.2h", "CVE-2016-2183", 1, "fixed in 1.0.2i" },
+        { "openssl", "1.0.2h", "CVE-2016-2182", 1, "fixed in 1.0.2i" },
+        { "openssl", "1.0.2i", "CVE-2016-6304", 0, "fixed in 1.0.2i" },
+        { "openssl", "1.0.2k", "CVE-2016-2182", 0, "later 1.0.2" },
+        { "openssl", "1.0.1t", "CVE-2016-6304", 1, "fixed in 1.0.1u" },
+        { "openssl", "1.0.1u", "CVE-2016-6304", 0, "fixed in 1.0.1u" },
+        { "openssl", "1.1.0a", "CVE-2016-6304", 0, "1.1.0 branch not covered here" },
+        /* kernel 4.9.152 (IoTGoat) */
+        { "linux-kernel", "4.9.152", "CVE-2019-11477", 1, "fixed in 4.9.182" },
+        { "linux-kernel", "4.9.152", "CVE-2019-11478", 1, "fixed in 4.9.182" },
+        { "linux-kernel", "3.16.70", "CVE-2019-11477", 0, "fixed in 3.16.69" },
+        { "linux-kernel", "3.16.60", "CVE-2019-11477", 1, "before 3.16.69" },
+        { "linux-kernel", "4.14.95", "CVE-2019-11477", 1, "fixed in 4.14.127" },
+        { "linux-kernel", "4.14.200", "CVE-2019-11477", 0, "fixed in 4.14.127" },
+    };
+    for (size_t i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
+        int got = cve_has(t[i].n, t[i].v, t[i].id);
+        if (got != t[i].want) {
+            printf("FAIL: test_cve_iotgoat_ranges (%s %s %s: got %d, want %d; %s)\n",
+                   t[i].n, t[i].v, t[i].id, got, t[i].want, t[i].why);
+            return 1;
+        }
+    }
+    /* conditions are carried through so the report can say "only if the awk applet is built in" */
+    component_t comp;
+    memset(&comp, 0, sizeof(comp));
+    strcpy(comp.name, "busybox"); strcpy(comp.version, "1.28.4"); strcpy(comp.source, "string");
+    cve_entry_t out[64];
+    size_t n = 0;
+    cve_check(&comp, 1, out, 64, &n);
+    int cond_ok = 0;
+    for (size_t i = 0; i < n; i++)
+        if (strcmp(out[i].cve_id, "CVE-2021-42386") == 0 && strcmp(out[i].condition, "awk applet") == 0) cond_ok = 1;
+    if (!cond_ok) { printf("FAIL: test_cve_iotgoat_ranges (condition not carried)\n"); return 1; }
+    printf("PASS: test_cve_iotgoat_ranges\n");
+    return 0;
+}
+
+/* The caller indexes its arrays with the reported count: it must never exceed what fits. */
+static int test_counts_are_clamped(void) {
+    char text[2048];
+    text[0] = '\0';
+    for (int i = 0; i < 30; i++) {
+        char one[64];
+        snprintf(one, sizeof(one), "BusyBox v1.%d.0 multi-call binary\n", i);
+        strcat(text, one);
+    }
+    component_t c[4];
+    size_t n = 0;
+    sbom_scan((const uint8_t *)text, strlen(text), c, 4, &n);
+    if (n > 4) { printf("FAIL: test_counts_are_clamped (sbom reported %zu for 4 slots)\n", n); return 1; }
+
+    component_t many[40];
+    memset(many, 0, sizeof(many));
+    for (int i = 0; i < 40; i++) {
+        strcpy(many[i].name, "busybox");
+        snprintf(many[i].version, sizeof(many[i].version), "1.%d.0", i + 1);
+    }
+    cve_entry_t out[2];
+    size_t cn = 0;
+    cve_check(many, 40, out, 2, &cn);
+    if (cn > 2) { printf("FAIL: test_counts_are_clamped (cve_check reported %zu for 2 slots)\n", cn); return 1; }
+    printf("PASS: test_counts_are_clamped\n");
+    return 0;
+}
+
+/* ── mkdirp: long paths and failures ── */
+static int test_mkdirp(void) {
+    char base[] = "/tmp/automata_mk_XXXXXX";
+    if (mkdtemp(base) == NULL) { printf("FAIL: test_mkdirp (mkdtemp)\n"); return 1; }
+    char deep[1024];
+    snprintf(deep, sizeof(deep), "%s", base);
+    for (int i = 0; i < 8; i++) strcat(deep, "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    int rc = mkdirp(deep);
+    struct stat st;
+    int created = (rc == 0 && stat(deep, &st) == 0 && S_ISDIR(st.st_mode));
+    /* a regular file in the way must be an error, not silent success */
+    char file[600];
+    snprintf(file, sizeof(file), "%s/afile", base);
+    put_file(base, "afile", "x", 1);
+    char blocked[700];
+    snprintf(blocked, sizeof(blocked), "%s/sub", file);
+    int blocked_rc = mkdirp(blocked);
+    rm_rf(base);
+    if (strlen(deep) < 300 || !created) { printf("FAIL: test_mkdirp (long path not created, rc=%d)\n", rc); return 1; }
+    if (blocked_rc == 0) { printf("FAIL: test_mkdirp (failure reported as success)\n"); return 1; }
+    printf("PASS: test_mkdirp\n");
+    return 0;
+}
+
+/* ── Report: fold container internals, group runs, keep untrusted strings safe ── */
+static int test_report_findings_layout(void) {
+    finding_t fs[32];
+    size_t n = 0;
+    memset(fs, 0, sizeof(fs));
+    for (int i = 0; i < 6; i++) {                       /* 6 DTBs in a row */
+        fs[n].offset = 0x1000 + (size_t)i * 0x800; fs[n].label = "Device Tree Blob"; fs[n].confidence = 1.0f; fs[n].type = SIG_DTB; n++;
+    }
+    fs[n].offset = 0x100000; fs[n].label = "SquashFS (LE)"; fs[n].confidence = 1.0f; fs[n].type = SIG_SQUASHFS_LE; fs[n].length = 0x50000; n++;
+    for (int i = 0; i < 5; i++) {                       /* XZ blocks inside the SquashFS */
+        fs[n].offset = 0x100100 + (size_t)i * 0x100; fs[n].label = "XZ Archive"; fs[n].confidence = 1.0f; fs[n].type = SIG_XZ; n++;
+    }
+    fs[n].offset = 0x200000; fs[n].label = "GZIP Archive"; fs[n].confidence = 0.9f; fs[n].type = SIG_GZIP; n++;
+    fs[n].offset = 0x300000; fs[n].label = "SquashFS (LE)"; fs[n].confidence = 0.3f; fs[n].type = SIG_SQUASHFS_LE; n++;
+
+    analysis_result_t res;
+    memset(&res, 0, sizeof(res));
+    snprintf(res.filename, sizeof(res.filename), "evil\x1b[2Jname.bin");
+    res.findings = fs;
+    res.num_findings = n;
+
+    char path[] = "/tmp/automata_report_XXXXXX";
+    int fd = mkstemp(path);
+    if (fd < 0) { printf("FAIL: test_report_findings_layout (mkstemp)\n"); return 1; }
+    close(fd);
+    report_human(&res, path);
+    char buf[8192] = {0};
+    FILE *f = fopen(path, "r");
+    size_t got = f ? fread(buf, 1, sizeof(buf) - 1, f) : 0;
+    if (f) fclose(f);
+    unlink(path);
+    buf[got] = '\0';
+
+    int ok = strstr(buf, "x6") != NULL &&                         /* DTB run grouped */
+             strstr(buf, "5 more findings inside this region hidden") != NULL &&
+             strstr(buf, "XZ Archive") == NULL &&                 /* internals folded away */
+             strstr(buf, "1 low-confidence findings hidden") != NULL &&
+             strstr(buf, "GZIP Archive") != NULL;
+    if (!ok) { printf("FAIL: test_report_findings_layout\n%s\n", buf); return 1; }
+
+    res.show_all_findings = 1;
+    f = fopen(path, "w"); if (f) fclose(f);
+    report_human(&res, path);
+    memset(buf, 0, sizeof(buf));
+    f = fopen(path, "r");
+    got = f ? fread(buf, 1, sizeof(buf) - 1, f) : 0;
+    if (f) fclose(f);
+    unlink(path);
+    if (strstr(buf, "XZ Archive") == NULL || strstr(buf, "conf: 0.30") == NULL) {
+        printf("FAIL: test_report_findings_layout (-v must show everything)\n");
+        return 1;
+    }
+    printf("PASS: test_report_findings_layout\n");
+    return 0;
+}
+
+/* ── Image headers: Netgear CHK, Broadcom TRX, U-Boot uImage ── */
+static int test_fwhdr_netgear_known_answer(void) {
+    /* The 58-byte CHK header of Netgear R7000 V1.0.9.64_10.2.64 (header checksum 0x520a0ce8 over the header with that field zeroed) */
+    static const uint8_t real[58] = {
+        0x2a,0x23,0x24,0x5e,0x00,0x00,0x00,0x3a,0x01,0x01,0x00,0x09,0x40,0x0a,0x02,0x40,
+        0x4d,0x68,0xfa,0xca,0x00,0x00,0x00,0x00,0x01,0xe3,0xc0,0x00,0x00,0x00,0x00,0x00,
+        0x4d,0x68,0xfa,0xca,0x52,0x0a,0x0c,0xe8,0x55,0x31,0x32,0x48,0x32,0x37,0x30,0x54,
+        0x30,0x30,0x5f,0x4e,0x45,0x54,0x47,0x45,0x41,0x52 };
+    uint8_t h[58];
+    memcpy(h, real, sizeof(h));
+    memset(h + 0x24, 0, 4);
+    uint32_t got = fwhdr_netgear_checksum(h, sizeof(h));
+    if (got != 0x520a0ce8u) {
+        printf("FAIL: test_fwhdr_netgear_known_answer (header checksum %08x, want 520a0ce8)\n", got);
+        return 1;
+    }
+    /* the header alone is truncated (payload missing): reported as an integrity problem, not crashed on */
+    fwhdr_t out[4];
+    size_t n = 0;
+    fwhdr_analyze(real, sizeof(real), out, 4, &n);
+    if (n != 1 || strcmp(out[0].format, "NETGEAR CHK") != 0 || out[0].integrity != 0 ||
+        strstr(out[0].summary, "U12H270T00_NETGEAR") == NULL || strstr(out[0].summary, "1.0.9.64_10.2.64") == NULL ||
+        strstr(out[0].checks, "header checksum OK") == NULL) {
+        printf("FAIL: test_fwhdr_netgear_known_answer (n=%zu, checks='%s')\n", n, n ? out[0].checks : "");
+        return 1;
+    }
+    printf("PASS: test_fwhdr_netgear_known_answer\n");
+    return 0;
+}
+
+static void put_le32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
+static void put_be32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)(v >> 24); p[1] = (uint8_t)(v >> 16); p[2] = (uint8_t)(v >> 8); p[3] = (uint8_t)v; }
+
+static int test_fwhdr_chk_trx(void) {
+    enum { KLEN = 400, RLEN = 600, TRX_LEN = 28 + KLEN + RLEN, CHK_LEN = 58 };
+    static uint8_t img[CHK_LEN + TRX_LEN];
+    memset(img, 0, sizeof(img));
+    uint8_t *trx = img + CHK_LEN;
+    memcpy(trx, "HDR0", 4);
+    put_le32(trx + 4, TRX_LEN);
+    trx[14] = 1;                                            /* version 1 */
+    put_le32(trx + 16, 28);                                 /* kernel */
+    put_le32(trx + 20, 28 + KLEN);                          /* rootfs */
+    for (size_t i = 28; i < TRX_LEN; i++) trx[i] = (uint8_t)(i * 7 + 3);
+    put_le32(trx + 8, ~(uint32_t)crc32(0L, trx + 12, TRX_LEN - 12));
+
+    uint8_t *chk = img;
+    memcpy(chk, "*#$^", 4);
+    put_be32(chk + 4, CHK_LEN);
+    chk[9] = 1; chk[10] = 0; chk[11] = 9; chk[12] = 64; chk[13] = 10; chk[14] = 2; chk[15] = 64;
+    put_be32(chk + 0x18, TRX_LEN);
+    uint32_t ichk = fwhdr_netgear_checksum(trx, TRX_LEN);
+    put_be32(chk + 0x10, ichk);
+    put_be32(chk + 0x20, ichk);
+    memcpy(chk + 0x28, "TEST123_NETGEAR", 15);
+    uint8_t hc[CHK_LEN];
+    memcpy(hc, chk, CHK_LEN);
+    memset(hc + 0x24, 0, 4);
+    put_be32(chk + 0x24, fwhdr_netgear_checksum(hc, CHK_LEN));
+
+    fwhdr_t out[4];
+    size_t n = 0;
+    fwhdr_analyze(img, sizeof(img), out, 4, &n);
+    if (n != 2 || strcmp(out[0].format, "NETGEAR CHK") != 0 || strcmp(out[1].format, "TRX v1") != 0 ||
+        out[0].integrity != 1 || out[1].integrity != 1 || out[1].num_parts != 2 ||
+        out[1].part_offset[0] != CHK_LEN + 28 || out[1].part_length[0] != KLEN ||
+        out[1].part_offset[1] != CHK_LEN + 28 + KLEN || out[1].part_length[1] != RLEN) {
+        printf("FAIL: test_fwhdr_chk_trx (n=%zu chk='%s' trx='%s')\n", n, n > 0 ? out[0].checks : "", n > 1 ? out[1].checks : "");
+        return 1;
+    }
+    /* one flipped payload byte breaks both checksums */
+    img[CHK_LEN + 28 + 100] ^= 0xff;
+    n = 0;
+    fwhdr_analyze(img, sizeof(img), out, 4, &n);
+    if (n != 2 || out[0].integrity != 0 || out[1].integrity != 0 ||
+        strstr(out[0].checks, "image checksum MISMATCH") == NULL || strstr(out[1].checks, "CRC32 MISMATCH") == NULL) {
+        printf("FAIL: test_fwhdr_chk_trx (corruption not detected)\n");
+        return 1;
+    }
+    printf("PASS: test_fwhdr_chk_trx\n");
+    return 0;
+}
+
+static int test_fwhdr_uimage(void) {
+    uint8_t img[64 + 200];
+    memset(img, 0, sizeof(img));
+    for (int i = 64; i < 264; i++) img[i] = (uint8_t)(i ^ 0x5a);
+    put_be32(img, 0x27051956);
+    put_be32(img + 12, 200);
+    put_be32(img + 16, 0x80008000);
+    put_be32(img + 20, 0x80008000);
+    put_be32(img + 24, (uint32_t)crc32(0L, img + 64, 200));
+    img[28] = 5; img[29] = 2; img[30] = 2; img[31] = 1;                 /* Linux, ARM, kernel, gzip */
+    memcpy(img + 32, "Linux-2.6.36", 12);
+    uint8_t hc[64];
+    memcpy(hc, img, 64);
+    memset(hc + 4, 0, 4);
+    put_be32(img + 4, (uint32_t)crc32(0L, hc, 64));
+
+    fwhdr_t out[2];
+    size_t n = 0;
+    fwhdr_analyze(img, sizeof(img), out, 2, &n);
+    if (n != 1 || strcmp(out[0].format, "uImage") != 0 || out[0].integrity != 1 ||
+        strstr(out[0].summary, "Linux-2.6.36") == NULL || strstr(out[0].summary, "ARM Linux kernel, gzip") == NULL ||
+        strstr(out[0].checks, "data CRC OK") == NULL) {
+        printf("FAIL: test_fwhdr_uimage (n=%zu '%s')\n", n, n ? out[0].summary : "");
+        return 1;
+    }
+    img[100] ^= 1;
+    n = 0;
+    fwhdr_analyze(img, sizeof(img), out, 2, &n);
+    if (n != 1 || out[0].integrity != 0 || strstr(out[0].checks, "data CRC MISMATCH") == NULL) {
+        printf("FAIL: test_fwhdr_uimage (data corruption not detected)\n");
+        return 1;
+    }
+    /* a stray magic with no valid header CRC is not reported */
+    uint8_t junk[128];
+    memset(junk, 0xAA, sizeof(junk));
+    put_be32(junk + 10, 0x27051956);
+    n = 99;
+    fwhdr_analyze(junk, sizeof(junk), out, 2, &n);
+    if (n != 0) { printf("FAIL: test_fwhdr_uimage (stray magic reported)\n"); return 1; }
+    printf("PASS: test_fwhdr_uimage\n");
+    return 0;
+}
+
+/* ── Binary review: imports decide what an executable can do ── */
+static size_t build_elf_imports(uint8_t *b, size_t cap, int is64, const char *const *names, size_t n, size_t pad_to, uint16_t e_type) {
+    memset(b, 0, cap);
+    uint8_t strtab[512];
+    size_t sl = 1;
+    strtab[0] = 0;
+    for (size_t i = 0; i < n; i++) { size_t l = strlen(names[i]); memcpy(strtab + sl, names[i], l + 1); sl += l + 1; }
+
+    size_t dyn_off = is64 ? 256 : 128, str_off = is64 ? 320 : 160;
+    size_t total = str_off + sl;
+    if (pad_to > total) total = pad_to;
+    if (total > cap) return 0;
+    uint64_t base = 0x400000;
+
+    b[0] = 0x7f; b[1] = 'E'; b[2] = 'L'; b[3] = 'F';
+    b[4] = is64 ? 2 : 1; b[5] = 1; b[6] = 1;
+    b[16] = (uint8_t)e_type; b[17] = (uint8_t)(e_type >> 8);
+    b[18] = is64 ? 62 : 40;
+    b[20] = 1;
+    memcpy(b + str_off, strtab, sl);
+    if (is64) {
+        b[32] = 64;                                         /* e_phoff */
+        b[54] = 56; b[56] = 2;                              /* phentsize, phnum */
+        uint8_t *p = b + 64;
+        put_le32(p, 1); put_le32(p + 4, 5);                 /* PT_LOAD, R+X */
+        put_le32(p + 16, (uint32_t)base); put_le32(p + 32, (uint32_t)total);
+        p += 56;
+        put_le32(p, 2);                                     /* PT_DYNAMIC */
+        put_le32(p + 8, (uint32_t)dyn_off); put_le32(p + 16, (uint32_t)(base + dyn_off)); put_le32(p + 32, 48);
+        uint8_t *d = b + dyn_off;
+        put_le32(d, 5);  put_le32(d + 8, (uint32_t)(base + str_off));      /* DT_STRTAB */
+        put_le32(d + 16, 10); put_le32(d + 24, (uint32_t)sl);              /* DT_STRSZ */
+    } else {
+        b[28] = 52;
+        b[42] = 32; b[44] = 2;
+        uint8_t *p = b + 52;
+        put_le32(p, 1); put_le32(p + 8, (uint32_t)base); put_le32(p + 16, (uint32_t)total); put_le32(p + 24, 5);
+        p += 32;
+        put_le32(p, 2); put_le32(p + 4, (uint32_t)dyn_off); put_le32(p + 8, (uint32_t)(base + dyn_off)); put_le32(p + 16, 24);
+        uint8_t *d = b + dyn_off;
+        put_le32(d, 5);  put_le32(d + 4, (uint32_t)(base + str_off));
+        put_le32(d + 8, 10); put_le32(d + 12, (uint32_t)sl);
+    }
+    return total;
+}
+
+static int review(const char *path, int is64, const char *const *names, size_t n, size_t pad, uint16_t etype, elf_info_t *info) {
+    static uint8_t buf[300 * 1024];
+    size_t len = build_elf_imports(buf, sizeof(buf), is64, names, n, pad, etype);
+    if (len == 0 || elf_parse_buf(buf, len, info) != 0) return -1;
+    snprintf(info->path, sizeof(info->path), "%s", path);
+    elf_review(buf, len, info);
+    return 0;
+}
+
+static int test_binary_review(void) {
+    static const char *const shell[] = { "socket", "bind", "listen", "accept", "dup2", "execl", "puts" };
+    static const char *const cmdsrv[] = { "socket", "bind", "listen", "accept", "system" };
+    static const char *const benign[] = { "puts", "printf" };
+    static const char *const sysonly[] = { "puts", "system" };
+    elf_info_t e;
+
+    if (review("usr/bin/shellback", 1, shell, 7, 0, 2, &e) != 0 || e.risk != 3 || strstr(e.risk_note, "bind-shell") == NULL) {
+        printf("FAIL: test_binary_review (bind shell not HIGH: risk=%d)\n", e.risk); return 1;
+    }
+    if (review("usr/bin/shellback", 0, shell, 7, 0, 2, &e) != 0 || e.risk != 3) {
+        printf("FAIL: test_binary_review (32-bit bind shell not HIGH: risk=%d)\n", e.risk); return 1;
+    }
+    if (review("usr/sbin/dropbear", 1, shell, 7, 0, 2, &e) != 0 || e.risk != 2 || strstr(e.risk_note, "remote access service") == NULL) {
+        printf("FAIL: test_binary_review (known service not MEDIUM)\n"); return 1;
+    }
+    if (review("usr/sbin/bigdaemon", 1, shell, 7, 200 * 1024, 2, &e) != 0 || e.risk >= 3) {
+        printf("FAIL: test_binary_review (full-size daemon flagged as bind shell)\n"); return 1;
+    }
+    if (review("bin/wget", 1, shell, 7, 0, 2, &e) != 0 || e.risk != 0) {
+        printf("FAIL: test_binary_review (client flagged)\n"); return 1;
+    }
+    if (review("usr/sbin/httpd", 1, cmdsrv, 5, 0, 2, &e) != 0 || e.risk != 2 || strstr(e.risk_note, "command-injection") == NULL) {
+        printf("FAIL: test_binary_review (system() server not MEDIUM)\n"); return 1;
+    }
+    if (review("usr/bin/hello", 1, benign, 2, 0, 2, &e) != 0 || e.risk != 0 || e.caps != 0) {
+        printf("FAIL: test_binary_review (benign flagged)\n"); return 1;
+    }
+    if (review("usr/bin/tool", 1, sysonly, 2, 0, 2, &e) != 0 || e.risk != 1) {
+        printf("FAIL: test_binary_review (system() not LOW)\n"); return 1;
+    }
+    if (review("bin/busybox", 1, shell, 7, 0, 2, &e) != 0 || e.risk != 0) {
+        printf("FAIL: test_binary_review (busybox flagged)\n"); return 1;
+    }
+    if (review("lib/libc.so", 1, shell, 7, 0, 3, &e) != 0 || e.risk != 0 || e.caps != 0) {
+        printf("FAIL: test_binary_review (shared object reviewed)\n"); return 1;
+    }
+    printf("PASS: test_binary_review\n");
+    return 0;
+}
+
+/* ── Secrets: false positives seen in the Netgear R7000 and IoTGoat scans ── */
+static int test_secrets_netgear_regressions(void) {
+    /* JS member access and UI label text */
+    if (count_secrets("var password=cf.sysDNSPassword_Netgear.value;", 0, PASSWORD) != 0 ||
+        count_secrets("parent.l2tp_password=cf.l2tp_passwd.value;", 0, PASSWORD) != 0 ||
+        count_secrets("bh_new_password=\"Nuova password\"\n", 0, PASSWORD) != 0 ||
+        count_secrets("password=getPassword()\n", 0, PASSWORD) != 0) {
+        printf("FAIL: test_secrets_netgear_regressions (code or label treated as a password)\n"); return 1;
+    }
+    /* web UI files skip keyword patterns entirely */
+    if (count_secrets("password=hunter2hunter2", SECRETS_F_WEBUI, PASSWORD) != 0) {
+        printf("FAIL: test_secrets_netgear_regressions (keyword matched in web UI file)\n"); return 1;
+    }
+    /* MD5 of "password" is a default credential, not just "a password" */
+    secret_finding_t f[4];
+    size_t n = 0;
+    const char *amule = "ECPort=4712\nECPassword=5f4dcc3b5aa765d61d8327deb882cf99\nUPnP=0\n";
+    secrets_scan_ex((const uint8_t *)amule, strlen(amule), f, 4, &n, 0);
+    if (n != 1 || f[0].type != HARDCODED_CRED || f[0].confidence < 0.9f || strstr(f[0].description, "MD5 of \"password\"") == NULL) {
+        printf("FAIL: test_secrets_netgear_regressions (default MD5 hash not recognised, n=%zu)\n", n); return 1;
+    }
+    const char *other = "password=0123456789abcdef0123456789abcdef\n";
+    secrets_scan_ex((const uint8_t *)other, strlen(other), f, 4, &n, 0);
+    if (n != 1 || strstr(f[0].description, "Unsalted MD5") == NULL) {
+        printf("FAIL: test_secrets_netgear_regressions (generic MD5 hash not recognised)\n"); return 1;
+    }
+    /* AWS key ids sit on word boundaries: this one is inside a word list in libunistring */
+    if (count_secrets("IMMUINGWAZININGUINSECTINSIDEISAKIAISSHARITALICIYANNAJOINED", 0, AWS_KEY) != 0 ||
+        count_secrets("key=AKIAIOSFODNN7EXAMPLE\n", 0, AWS_KEY) != 1 ||
+        count_secrets("key=AKIAIOSFODNN7EXAMPLE\n", SECRETS_F_BINARY, AWS_KEY) != 0) {
+        printf("FAIL: test_secrets_netgear_regressions (AWS key boundaries)\n"); return 1;
+    }
+    /* group/passwd entries are not credentials; a hash or a literal password is */
+    if (count_secrets("admin:x:0:\nadmin:*:1:2\nadmin::3\n", 0, HARDCODED_CRED) != 0 ||
+        count_secrets("admin:$1$abc$0123456789abcdefghijkl:0:0\n", 0, HARDCODED_CRED) != 1 ||
+        count_secrets("curl -u admin:hunter2pw http://x\n", 0, HARDCODED_CRED) != 1) {
+        printf("FAIL: test_secrets_netgear_regressions (admin entries)\n"); return 1;
+    }
+    printf("PASS: test_secrets_netgear_regressions\n");
+    return 0;
+}
+
+/* ── Filesystems: JFFS2 (native), CramFS, UBI, and the optional codecs ── */
+static int file_is(const char *dir, const char *rel, const void *want, size_t n) {
+    char path[1024];
+    snprintf(path, sizeof(path), "%s/%s", dir, rel);
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    uint8_t buf[4096];
+    size_t got = fread(buf, 1, sizeof(buf), f);
+    fclose(f);
+    return got == n && memcmp(buf, want, n) == 0;
+}
+
+static int check_jffs2_fixture(const char *name, const uint8_t *img, size_t len, int be) {
+    uint8_t buf[2048];
+    memset(buf, 0xAA, 50);
+    memcpy(buf + 50, img, len);
+    memset(buf + 50 + len, 0xFF, 200);
+    size_t total = 50 + len + 200;
+
+    finding_t fs[8];
+    size_t nf = 0;
+    identify_scan(buf, total, fs, 8, &nf);
+    int found = 0;
+    for (size_t i = 0; i < nf; i++)
+        if (fs[i].offset == 50 && fs[i].type == (be ? SIG_JFFS2_BE : SIG_JFFS2_LE) && fs[i].confidence >= 0.99f) found = 1;
+    if (!found) { printf("FAIL: test_jffs2_extract (%s: real node not recognised, CRC rule wrong?)\n", name); return 1; }
+
+    char base[] = "/tmp/automata_jffs2_XXXXXX";
+    if (mkdtemp(base) == NULL) return 1;
+    char out[600];
+    snprintf(out, sizeof(out), "%s/out", base);
+    size_t span = 0, files = 0, unsup = 99;
+    int rc = jffs2_extract(buf, total, 50, be, out, &span, &files, &unsup);
+
+    char motd[30 * 25 + 1] = "";
+    for (int i = 0; i < 30; i++) strcat(motd, "automata jffs2 test line\n");
+    const char *passwd = "root:x:0:0:root:/root:/bin/ash\n";
+    int ok = rc == 0 && files == 4 && unsup == 0 && span > 0 &&
+             file_is(out, "etc/passwd", passwd, strlen(passwd)) &&
+             file_is(out, "etc/motd", motd, strlen(motd));
+    char linkpath[700], target[64] = "";
+    snprintf(linkpath, sizeof(linkpath), "%s/bin/sh", out);
+    ssize_t tl = readlink(linkpath, target, sizeof(target) - 1);
+    if (tl > 0) target[tl] = '\0';
+    ok = ok && strcmp(target, "/bin/ash") == 0;
+    struct stat st;
+    char blob[700];
+    snprintf(blob, sizeof(blob), "%s/bin/blob.bin", out);
+    ok = ok && stat(blob, &st) == 0 && st.st_size == 200;
+    rm_rf(base);
+    if (!ok) { printf("FAIL: test_jffs2_extract (%s: rc=%d files=%zu unsupported=%zu)\n", name, rc, files, unsup); return 1; }
+    return 0;
+}
+
+static int test_jffs2_extract(void) {
+    if (check_jffs2_fixture("LE zlib+none", fx_jffs2_le, sizeof(fx_jffs2_le), 0)) return 1;
+    if (check_jffs2_fixture("BE zlib+none", fx_jffs2_be, sizeof(fx_jffs2_be), 1)) return 1;
+    if (check_jffs2_fixture("LE rtime", fx_jffs2_rtime, sizeof(fx_jffs2_rtime), 0)) return 1;
+    printf("PASS: test_jffs2_extract\n");
+    return 0;
+}
+
+static uint32_t jt_crc(const uint8_t *p, size_t n) { return ~(uint32_t)crc32(0xFFFFFFFFUL, p, (uInt)n); }
+static size_t jt_dirent(uint8_t *b, uint32_t pino, uint32_t ino, uint32_t ver, uint8_t type, const char *name) {
+    size_t nl = strlen(name), tot = 40 + nl;
+    memset(b, 0, (tot + 3) & ~3u);
+    b[0] = 0x85; b[1] = 0x19; b[2] = 0x01; b[3] = 0xE0;
+    put_le32(b + 4, (uint32_t)tot);
+    put_le32(b + 8, jt_crc(b, 8));
+    put_le32(b + 12, pino); put_le32(b + 16, ver); put_le32(b + 20, ino);
+    b[28] = (uint8_t)nl; b[29] = type;
+    memcpy(b + 40, name, nl);
+    put_le32(b + 32, jt_crc(b, 32));
+    put_le32(b + 36, jt_crc(b + 40, nl));
+    return (tot + 3) & ~3u;
+}
+static size_t jt_inode(uint8_t *b, uint32_t ino, uint32_t ver, uint32_t mode, const char *data) {
+    size_t dl = strlen(data), tot = 68 + dl;
+    memset(b, 0, (tot + 3) & ~3u);
+    b[0] = 0x85; b[1] = 0x19; b[2] = 0x02; b[3] = 0xE0;
+    put_le32(b + 4, (uint32_t)tot);
+    put_le32(b + 8, jt_crc(b, 8));
+    put_le32(b + 12, ino); put_le32(b + 16, ver); put_le32(b + 20, mode);
+    put_le32(b + 28, (uint32_t)dl); put_le32(b + 48, (uint32_t)dl); put_le32(b + 52, (uint32_t)dl);
+    memcpy(b + 68, data, dl);
+    put_le32(b + 60, jt_crc(b + 68, dl));
+    put_le32(b + 64, jt_crc(b, 60));
+    return (tot + 3) & ~3u;
+}
+
+/* A hostile image must not write outside the output directory, neither through ".." and "/" in names
+ * nor through a symlink that a later entry claims as its parent directory. */
+static int test_jffs2_hostile(void) {
+    char base[] = "/tmp/automata_jhost_XXXXXX";
+    if (mkdtemp(base) == NULL) return 1;
+    char target[700], out[700], evil[700];
+    snprintf(target, sizeof(target), "%s/target", base);
+    snprintf(out, sizeof(out), "%s/out", base);
+    snprintf(evil, sizeof(evil), "%s/evil", base);
+    mkdir(target, 0755);
+
+    static uint8_t img[4096];
+    size_t p = 0;
+    p += jt_dirent(img + p, 1, 2, 1, 8, "../evil");     p += jt_inode(img + p, 2, 1, 0100644, "EVIL");
+    p += jt_dirent(img + p, 1, 3, 1, 8, "a/b");         p += jt_inode(img + p, 3, 1, 0100644, "EVIL2");
+    p += jt_dirent(img + p, 1, 4, 1, 10, "lnk");        p += jt_inode(img + p, 4, 1, 0120777, target);
+    p += jt_dirent(img + p, 4, 5, 1, 8, "pwned");       p += jt_inode(img + p, 5, 1, 0100644, "EVIL3");
+    p += jt_dirent(img + p, 1, 6, 1, 8, "ok");          p += jt_inode(img + p, 6, 1, 0100644, "fine");
+
+    size_t span = 0, files = 0, unsup = 0;
+    int rc = jffs2_extract(img, p, 0, 0, out, &span, &files, &unsup);
+    char tp[800], okp[800];
+    snprintf(tp, sizeof(tp), "%s/pwned", target);
+    snprintf(okp, sizeof(okp), "%s/ok", out);
+    struct stat st;
+    int escaped = stat(evil, &st) == 0 || stat(tp, &st) == 0;
+    int ok_written = file_is(out, "ok", "fine", 4);
+    (void)okp;
+    rm_rf(base);
+    if (rc != 0 || escaped || !ok_written) {
+        printf("FAIL: test_jffs2_hostile (rc=%d escaped=%d ok_written=%d)\n", rc, escaped, ok_written);
+        return 1;
+    }
+    printf("PASS: test_jffs2_hostile\n");
+    return 0;
+}
+
+static int test_cramfs(void) {
+    uint8_t buf[8192];
+    memset(buf, 0xAA, 100);
+    memset(buf + 100, 0, 4096);
+    memcpy(buf + 100, fx_cramfs, sizeof(fx_cramfs));
+    memset(buf + 100 + 4096, 0xAA, 64);
+    size_t total = 100 + 4096 + 64;
+
+    if (cramfs_size(buf, total, 100) != 4096) { printf("FAIL: test_cramfs (size from header)\n"); return 1; }
+    finding_t fs[4];
+    size_t nf = 0;
+    identify_scan(buf, total, fs, 4, &nf);
+    if (nf != 1 || fs[0].type != SIG_CRAMFS || fs[0].offset != 100 || fs[0].length != 4096) {
+        printf("FAIL: test_cramfs (identify: n=%zu)\n", nf);
+        return 1;
+    }
+    if (!cramfs_available()) { printf("PASS: test_cramfs (extraction skipped: fsck.cramfs not installed)\n"); return 0; }
+
+    char base[] = "/tmp/automata_cramfs_XXXXXX";
+    if (mkdtemp(base) == NULL) return 1;
+    char out[600];
+    snprintf(out, sizeof(out), "%s/out", base);
+    int rc = cramfs_extract(buf, total, 100, out);
+    int ok = rc == 0 && file_is(out, "etc/passwd", "cramfs test passwd\n", 19);
+    rm_rf(base);
+    if (!ok) { printf("FAIL: test_cramfs (extract rc=%d)\n", rc); return 1; }
+    printf("PASS: test_cramfs\n");
+    return 0;
+}
+
+static int test_ubi_header(void) {
+    uint8_t buf[256];
+    memset(buf, 0xFF, sizeof(buf));
+    memcpy(buf + 32, fx_ubi_ec, 64);                    /* first 64 bytes of a real ubinize image */
+    finding_t fs[4];
+    size_t nf = 0;
+    identify_scan(buf, sizeof(buf), fs, 4, &nf);
+    if (nf != 1 || fs[0].type != SIG_UBI || fs[0].confidence < 0.99f || fs[0].offset != 32) {
+        printf("FAIL: test_ubi_header (n=%zu)\n", nf);
+        return 1;
+    }
+    buf[32 + 20] ^= 1;                                  /* corrupt data_offset: header CRC no longer matches */
+    nf = 0;
+    identify_scan(buf, sizeof(buf), fs, 4, &nf);
+    for (size_t i = 0; i < nf; i++)
+        if (fs[i].type == SIG_UBI && fs[i].confidence >= IDENTIFY_MIN_CONFIDENCE) {
+            printf("FAIL: test_ubi_header (corrupt header accepted)\n");
+            return 1;
+        }
+    printf("PASS: test_ubi_header\n");
+    return 0;
+}
+
+static int extract_roundtrip(const char *label, const uint8_t *comp, size_t clen, const char *want_type, const char *plain, size_t plen) {
+    uint8_t img[4096];
+    memset(img, 0xAA, sizeof(img));
+    if (300 + clen + 100 > sizeof(img)) return 1;
+    memcpy(img + 300, comp, clen);
+    char dir[] = "/tmp/automata_codec_XXXXXX";
+    if (mkdtemp(dir) == NULL) return 1;
+    extract_result_t res[4];
+    size_t n = 0;
+    extract_all(img, 300 + clen + 100, dir, res, 4, &n);
+    int ok = n == 1 && res[0].offset == 300 && strcmp(res[0].type, want_type) == 0 && res[0].decompressed == plen;
+    if (ok) {
+        FILE *f = fopen(res[0].path, "rb");
+        uint8_t back[2048] = {0};
+        size_t got = f ? fread(back, 1, sizeof(back), f) : 0;
+        if (f) fclose(f);
+        ok = got == plen && memcmp(back, plain, plen) == 0;
+        unlink(res[0].path);
+    }
+    rmdir(dir);
+    if (!ok) { printf("FAIL: test_codecs (%s: n=%zu)\n", label, n); return 1; }
+    return 0;
+}
+
+static int test_codecs(void) {
+    char plain[1200];
+    for (size_t i = 0; i < sizeof(plain); i++) plain[i] = "root:x:0:0 password=SuperSecret123\n"[i % 35];
+    int tested = 0;
+#ifdef HAVE_BZIP2
+    {
+        uint8_t c[2048];
+        unsigned int cl = sizeof(c);
+        if (BZ2_bzBuffToBuffCompress((char *)c, &cl, plain, sizeof(plain), 9, 0, 30) != BZ_OK ||
+            extract_roundtrip("bzip2", c, cl, "bzip2", plain, sizeof(plain))) return 1;
+        tested++;
+    }
+#endif
+#ifdef HAVE_ZSTD
+    {
+        uint8_t c[2048];
+        size_t cl = ZSTD_compress(c, sizeof(c), plain, sizeof(plain), 3);
+        if (ZSTD_isError(cl) || extract_roundtrip("zstd", c, cl, "zstd", plain, sizeof(plain))) return 1;
+        tested++;
+    }
+#endif
+#ifdef HAVE_LZ4
+    {
+        uint8_t c[2048];
+        size_t cl = LZ4F_compressFrame(c, sizeof(c), plain, sizeof(plain), NULL);
+        if (LZ4F_isError(cl) || extract_roundtrip("lz4", c, cl, "lz4", plain, sizeof(plain))) return 1;
+        tested++;
+    }
+#endif
+    printf("PASS: test_codecs (%d of 3 optional codecs compiled in)\n", tested);
+    return 0;
+}
+
 int run_all_tests(void) {
     tests_run = 0;
     tests_passed = 0;
@@ -622,6 +1450,23 @@ int run_all_tests(void) {
     RUN_TEST(test_cve_check);
     RUN_TEST(test_cve_no_false_positives);
     RUN_TEST(test_cve_true_positives);
+    RUN_TEST(test_cve_iotgoat_ranges);
+    RUN_TEST(test_secrets_false_positives);
+    RUN_TEST(test_elf_kinds);
+    RUN_TEST(test_sbom_opkg);
+    RUN_TEST(test_counts_are_clamped);
+    RUN_TEST(test_mkdirp);
+    RUN_TEST(test_report_findings_layout);
+    RUN_TEST(test_fwhdr_netgear_known_answer);
+    RUN_TEST(test_fwhdr_chk_trx);
+    RUN_TEST(test_fwhdr_uimage);
+    RUN_TEST(test_binary_review);
+    RUN_TEST(test_secrets_netgear_regressions);
+    RUN_TEST(test_jffs2_extract);
+    RUN_TEST(test_jffs2_hostile);
+    RUN_TEST(test_cramfs);
+    RUN_TEST(test_ubi_header);
+    RUN_TEST(test_codecs);
 
     printf("\n%d/%d tests passed\n", tests_passed, tests_run);
     return (tests_passed == tests_run) ? 0 : 1;

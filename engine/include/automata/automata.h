@@ -17,5 +17,7 @@
 #include "automata/sbom.h"
 #include "automata/cve.h"
 #include "automata/tree.h"
+#include "automata/fwhdr.h"
+#include "automata/fsextract.h"
 
 #endif /* AUTOMATA_H */

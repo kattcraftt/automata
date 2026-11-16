@@ -11,11 +11,11 @@
 size_t squashfs_superblock_size(const uint8_t *data, size_t size, size_t offset);
 
 /* Extract a SquashFS image found at data+offset to out_dir.
- * Shells out to system unsquashfs.
- * Returns 0 on success, -1 on error (unsquashfs not found, etc.) */
+ * Runs the system unsquashfs directly (fork/exec, no shell).
+ * Returns 0 on success, -1 on error (unsquashfs not found, bad superblock, etc.) */
 int squashfs_extract(const uint8_t *data, size_t size, size_t offset, const char *out_dir);
 
-/* Check if unsquashfs is available on the system */
+/* Check if unsquashfs is available on PATH */
 int squashfs_available(void);
 
 #endif /* AUTOMATA_SQUASHFS_H */
